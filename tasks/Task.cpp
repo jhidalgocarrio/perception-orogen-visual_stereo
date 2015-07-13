@@ -60,21 +60,20 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
 
             this->interMatches(fprevious_right, fcurrent_right, inter_matches_right);
 
-            this->intraFeatures(fcurrent_left.keypoints, fcurrent_right.keypoints,
-                                fcurrent_left.descriptors, fcurrent_right.descriptors,
+            this->intraFeatures(fcurrent_left, fcurrent_right,
                                 inter_matches_left, inter_matches_right,
-                                features_left, features_right, intra_matches);
+                                ffinal_left, ffinal_right, intra_matches);
 
             /** Draw good matches **/
             if (_output_debug.value())
             {
                 if (_image_ouput_type.get() == visual_stereo::INTRA_MATCHES)
                 {
-                    this->drawMatches(frame_pair.first, frame_pair.second, features_left.keypoints, features_right.keypoints, intra_matches);
+                    this->drawMatches(frame_pair.first, frame_pair.second, ffinal_left.keypoints, ffinal_right.keypoints, intra_matches);
                 }
                 else if (_image_ouput_type.get() == visual_stereo::INTER_KEYPOINTS)
                 {
-                    this->drawKeypoints(frame_pair.first, fprevious_left.keypoints, fcurrent_left.keypoints, inter_matches);
+                    this->drawKeypoints(frame_pair.first, fprevious_left.keypoints, fcurrent_left.keypoints, inter_matches_left);
                 }
             }
         }
@@ -116,21 +115,20 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
 
             this->interMatches(fprevious_right, fcurrent_right, inter_matches_right);
 
-            this->intraFeatures(fcurrent_left.keypoints, fcurrent_right.keypoints,
-                                fcurrent_left.descriptors, fcurrent_right.descriptors,
+            this->intraFeatures(fcurrent_left, fcurrent_right,
                                 inter_matches_left, inter_matches_right,
-                                features_left, features_right, intra_matches);
+                                ffinal_left, ffinal_right, intra_matches);
 
             /** Draw good matches **/
             if (_output_debug.value())
             {
                 if (_image_ouput_type.get() == visual_stereo::INTRA_MATCHES)
                 {
-                    this->drawMatches(frame_pair.first, frame_pair.second, features_left.keypoints, features_right.keypoints, intra_matches);
+                    this->drawMatches(frame_pair.first, frame_pair.second, ffinal_left.keypoints, ffinal_right.keypoints, intra_matches);
                 }
                 else if (_image_ouput_type.get() == visual_stereo::INTER_KEYPOINTS)
                 {
-                    this->drawKeypoints(frame_pair.first, fprevious_left.keypoints, fcurrent_left.keypoints, inter_matches);
+                    this->drawKeypoints(frame_pair.second, fprevious_right.keypoints, fcurrent_right.keypoints, inter_matches_right);
                 }
             }
         }
@@ -222,15 +220,13 @@ void Task::prepareMatches()
     this->fcurrent_left.img_idx = frame_idx;
     this->fcurrent_right.img_idx = frame_idx++;
 
-    this->intra_matches_previous = this->intra_matches_current;
-
     return;
 }
 
 void Task::detectFeatures (const base::samples::frame::Frame &frame_left,
                         const base::samples::frame::Frame &frame_right,
                         cv::detail::ImageFeatures &features_left,
-                        cv::detail::ImageFeatures &features_right);
+                        cv::detail::ImageFeatures &features_right)
 {
     /** Convert Images to opencv **/
     cv::Mat img_l = frameHelperLeft.convertToCvMat(frame_left);
@@ -412,50 +408,57 @@ void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
     return;
 }
 
-void Task::intraFeatures(const std::vector<cv::KeyPoint> &keypoints_left,
-                const std::vector<cv::KeyPoint> &keypoints_right,
-                const cv::Mat &descriptors_left,
-                const cv::Mat &descriptors_right,
-                const std::vector<cv::DMatch> &matches_left,
-                const std::vector<cv::DMatch> &matches_right,
-                cv::detail::ImageFeatures &features_left,
-                cv::detail::ImageFeatures &features_right,
-                std::vector<cv::DMatch> &intra_matches)
+void Task::intraFeatures(const cv::detail::ImageFeatures &features_left,
+                    const cv::detail::ImageFeatures &features_right,
+                    const std::vector<cv::DMatch> &matches_left,
+                    const std::vector<cv::DMatch> &matches_right,
+                    cv::detail::ImageFeatures &final_left,
+                    cv::detail::ImageFeatures &final_right,
+                    std::vector<cv::DMatch> &intra_matches)
 {
     cv::SurfFeatureDetector detector;
     const int length = detector.descriptorSize();
 
-    /** Get good features from left pair matches **/
-    cv::detail::ImageFeatures features_left;
-    features_left.descriptors = cv::Mat(0, length, CV_32FC1);
+    /** Subset current features from left pair matches **/
+    cv::detail::ImageFeatures subset_left;
+    subset_left.descriptors = cv::Mat(0, length, CV_32FC1);
     for (std::vector<cv::DMatch>::const_iterator it= matches_left.begin(); it!= matches_left.end(); ++it)
     {
-        features_left.keypoints.push_back(keypoints_left[it->trainIdx]);
-        features_left.descriptors.push_back(descriptors_left.row(it->trainIdx));
+        subset_left.keypoints.push_back(features_left.keypoints[it->trainIdx]);
+        subset_left.descriptors.push_back(features_left.descriptors.row(it->trainIdx));
     }
+    std::cout<<"features_left.keypoints: "<<features_left.keypoints.size()<<"\n";
+    std::cout<<"features_left.descriptors: "<<features_left.descriptors.rows<<"\n";
+    std::cout<<"subset_left.keypoints: "<<subset_left.keypoints.size()<<"\n";
+    std::cout<<"subset_left.descriptors: "<<subset_left.descriptors.size()<<"\n";
 
 
-    /** Get good features from right pair matches **/
-    cv::detail::ImageFeatures features_right;
-    features_right.descriptors = cv::Mat(0, length, CV_32FC1);
+    /** Subset current features from right pair matches **/
+    cv::detail::ImageFeatures subset_right;
+    subset_right.descriptors = cv::Mat(0, length, CV_32FC1);
     for (std::vector<cv::DMatch>::const_iterator it= matches_right.begin(); it!= matches_right.end(); ++it)
     {
-        features_right.keypoints.push_back(keypoints_right[it->trainIdx]);
-        features_right.descriptors.push_back(descriptors_right.row(it->trainIdx));
+        subset_right.keypoints.push_back(features_right.keypoints[it->trainIdx]);
+        subset_right.descriptors.push_back(features_right.descriptors.row(it->trainIdx));
     }
 
+    std::cout<<"features_right.keypoints: "<<features_right.keypoints.size()<<"\n";
+    std::cout<<"features_right.descriptors: "<<features_right.descriptors.rows<<"\n";
+    std::cout<<"subset_right.keypoints: "<<subset_right.keypoints.size()<<"\n";
+    std::cout<<"subset_right.descriptors: "<<subset_right.descriptors.size()<<"\n";
 
-    /** Match features descriptors using flann **/
+
+    /** Match left and right subsets descriptors using flann **/
     cv::FlannBasedMatcher matcher;
     std::vector<cv::DMatch> matches;
-    matcher.match(features_left.descriptors, features_right.descriptors, matches);
+    matcher.match(subset_left.descriptors, subset_right.descriptors, matches);
 
     intra_matches.clear();
     for (std::vector<cv::DMatch>::const_iterator it= matches.begin(); it!= matches.end(); ++it)
     {
         if (it->distance <= cv::max(std::sqrt(pxleftVar.diagonal()[0]), std::sqrt(pxleftVar.diagonal()[1])))
         {
-            float dy_point = std::fabs(features_left.keypoints[it->queryIdx].pt.y - features_right.keypoints[it->trainIdx].pt.y);
+            float dy_point = std::fabs(subset_left.keypoints[it->queryIdx].pt.y - subset_right.keypoints[it->trainIdx].pt.y);
             float dy_center = std::fabs(this->cameracalib.camLeft.cy - this->cameracalib.camRight.cy);
             /** Epipolar line **/
             if (dy_point <= 5.0 * dy_center)
@@ -465,19 +468,8 @@ void Task::intraFeatures(const std::vector<cv::KeyPoint> &keypoints_left,
         }
     }
 
-    /** Get the good features **/
-    cv::detail::ImageFeatures features_l, features_r;
-    for (std::vector<cv::DMatch>::const_iterator it= intra_matches.begin(); it!= intra_matches.end(); ++it)
-    {
-        features_l.keypoints.push_back(features_left.keypoints[it->queryIdx]);
-        features_l.descriptors.push_back(features_left.descriptors.row(it->queryIdx));
-
-        features_r.keypoints.push_back(features_right.keypoints[it->trainIdx]);
-        features_r.descriptors.push_back(features_right.descriptors.row(it->trainIdx));
-    }
-
-    features_left = features_l;
-    features_right = features_r;
+    final_left = subset_left;
+    final_right = subset_right;
 
     return;
 }

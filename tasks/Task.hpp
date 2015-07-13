@@ -78,7 +78,7 @@ tasks/Task.cpp, and will be put in the visual_stereo namespace.
         Eigen::Matrix4d Q; /** Re-projection matrix **/
         cv::detail::ImageFeatures fcurrent_left, fcurrent_right, fprevious_left, fprevious_right;
         std::vector< cv::DMatch > intra_matches, inter_matches_left, inter_matches_right;
-        cv::detail::ImageFeatures intra_features;
+        cv::detail::ImageFeatures ffinal_left, ffinal_right;
 
         /***************************/
         /** Output Port Variables **/
@@ -189,16 +189,13 @@ tasks/Task.cpp, and will be put in the visual_stereo namespace.
                 std::vector<cv::KeyPoint> &keypoints2,
                 std::vector<cv::DMatch> &matches);
 
-        void intraFeatures(const std::vector<cv::KeyPoint> &keypoints_left,
-                const std::vector<cv::KeyPoint> &keypoints_right,
-                const cv::Mat &descriptors_left,
-                const cv::Mat &descriptors_right,
-                const std::vector<cv::DMatch> &matches_left,
-                const std::vector<cv::DMatch> &matches_right,
-                cv::detail::ImageFeatures &features_left,
-                cv::detail::ImageFeatures &features_right,
-                std::vector<cv::DMatch> &intra_matches);
-
+        void intraFeatures(const cv::detail::ImageFeatures &features_left,
+                    const cv::detail::ImageFeatures &features_right,
+                    const std::vector<cv::DMatch> &matches_left,
+                    const std::vector<cv::DMatch> &matches_right,
+                    cv::detail::ImageFeatures &final_left,
+                    cv::detail::ImageFeatures &final_right,
+                    std::vector<cv::DMatch> &intra_matches);
 
     };
 }
