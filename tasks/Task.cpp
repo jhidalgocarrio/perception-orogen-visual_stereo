@@ -33,8 +33,6 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
     std::cout << "[VISO2 LEFT_FRAME] Frame arrived at: " <<left_frame_sample->time.toString()<< std::endl;
     #endif
 
-    frame_previous_pair.first = frame_pair.first;
-
     /** The image need to be in gray scale and undistorted **/
     frame_pair.first.init(left_frame_sample->size.width, left_frame_sample->size.height, left_frame_sample->getDataDepth(), base::samples::frame::MODE_GRAYSCALE);
     frameHelperLeft.convert (*left_frame_sample, frame_pair.first, 0, 0, _resize_algorithm.value(), true);
@@ -60,7 +58,7 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
 
             this->interMatches(fprevious_right, fcurrent_right, inter_matches_right);
 
-            this->intraFeatures(fcurrent_left, fcurrent_right,
+            this->intraMatches(fcurrent_left, fcurrent_right,
                                 inter_matches_left, inter_matches_right,
                                 ffinal_left, ffinal_right, intra_matches);
 
@@ -88,8 +86,6 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
     std::cout<< "[VISO2 RIGHT_FRAME] Frame arrived at: " <<right_frame_sample->time.toString()<<std::endl;
     #endif
 
-    frame_previous_pair.second = frame_pair.second;
-
     /** Correct distortion in image right **/
     frame_pair.second.init(right_frame_sample->size.width, right_frame_sample->size.height, right_frame_sample->getDataDepth(), base::samples::frame::MODE_GRAYSCALE);
     frameHelperRight.convert (*right_frame_sample, frame_pair.second, 0, 0, _resize_algorithm.value(), true);
@@ -115,7 +111,7 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
 
             this->interMatches(fprevious_right, fcurrent_right, inter_matches_right);
 
-            this->intraFeatures(fcurrent_left, fcurrent_right,
+            this->intraMatches(fcurrent_left, fcurrent_right,
                                 inter_matches_left, inter_matches_right,
                                 ffinal_left, ffinal_right, intra_matches);
 
@@ -128,7 +124,7 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
                 }
                 else if (_image_ouput_type.get() == visual_stereo::INTER_KEYPOINTS)
                 {
-                    this->drawKeypoints(frame_pair.second, fprevious_right.keypoints, fcurrent_right.keypoints, inter_matches_right);
+                    this->drawKeypoints(frame_pair.first, fprevious_left.keypoints, fcurrent_left.keypoints, inter_matches_left);
                 }
             }
         }
@@ -254,11 +250,18 @@ void Task::detectFeatures (const base::samples::frame::Frame &frame_left,
     features_left.descriptors = descriptors_l;
     features_right.descriptors = descriptors_r;
 
+    std::cout<<"DETECTING...\n";
+    std::cout<<"features_left.keypoints: "<<features_left.keypoints.size()<<"\n";
+    std::cout<<"features_left.descriptors: "<<features_left.descriptors.size()<<"\n";
+    std::cout<<"features_right.keypoints: "<<features_right.keypoints.size()<<"\n";
+    std::cout<<"features_right.descriptors: "<<features_right.descriptors.size()<<"\n";
+    std::cout<<"...[OK]\n";
+
     return;
 }
 
-void Task::interMatches (cv::detail::ImageFeatures &features_previous,
-                        cv::detail::ImageFeatures &features_current,
+void Task::interMatches (const cv::detail::ImageFeatures &features_previous,
+                        const cv::detail::ImageFeatures &features_current,
                         std::vector< cv::DMatch > &good_matches)
 {
 
@@ -266,6 +269,7 @@ void Task::interMatches (cv::detail::ImageFeatures &features_previous,
     cv::FlannBasedMatcher matcher;
     std::vector< cv::DMatch > matches;
     matcher.match(features_previous.descriptors, features_current.descriptors, matches);
+    std::cout<<"inter_matches: "<<matches.size()<<"\n";
 
     /** Extract matches points **/
     std::vector<cv::Point2f> points1, points2;
@@ -290,8 +294,8 @@ void Task::interMatches (cv::detail::ImageFeatures &features_previous,
     {
         cv::Mat fundamental= cv::findFundamentalMat(points1, points2, // matching points
                                                     inliers,       // match status (inlier or outlier)
-                                                    cv::FM_RANSAC, // RANSAC method
-                                                    0.68, 0.99);
+                                                    cv::FM_7POINT);
+
         // extract the surviving (inliers) matches
         std::vector<unsigned char>::const_iterator
         itIn= inliers.begin();
@@ -328,7 +332,8 @@ void Task::interMatches (cv::detail::ImageFeatures &features_previous,
         {
             cv::Mat fundamental= cv::findFundamentalMat(points1, points2, // matching points
                                                         inliers,       // match status (inlier or outlier)
-                                                        cv::FM_7POINT); // RANSAC method
+                                                        cv::FM_RANSAC, // RANSAC method
+                                                        0.68, 0.99);
 
             // extract the surviving (inliers) matches
             itIn= inliers.begin();
@@ -343,9 +348,14 @@ void Task::interMatches (cv::detail::ImageFeatures &features_previous,
                 }
             }
         }
+        else
+        {
+            ref_matches = out_matches;
+        }
     }
 
     good_matches = ref_matches;
+    std::cout<<"good_matches: "<<good_matches.size()<<"\n";
 
     return;
 }
@@ -408,7 +418,7 @@ void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
     return;
 }
 
-void Task::intraFeatures(const cv::detail::ImageFeatures &features_left,
+void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
                     const cv::detail::ImageFeatures &features_right,
                     const std::vector<cv::DMatch> &matches_left,
                     const std::vector<cv::DMatch> &matches_right,
@@ -422,13 +432,21 @@ void Task::intraFeatures(const cv::detail::ImageFeatures &features_left,
     /** Subset current features from left pair matches **/
     cv::detail::ImageFeatures subset_left;
     subset_left.descriptors = cv::Mat(0, length, CV_32FC1);
-    for (std::vector<cv::DMatch>::const_iterator it= matches_left.begin(); it!= matches_left.end(); ++it)
+    if (matches_left.size() > 0)
     {
-        subset_left.keypoints.push_back(features_left.keypoints[it->trainIdx]);
-        subset_left.descriptors.push_back(features_left.descriptors.row(it->trainIdx));
+        for (std::vector<cv::DMatch>::const_iterator it= matches_left.begin(); it!= matches_left.end(); ++it)
+        {
+            subset_left.keypoints.push_back(features_left.keypoints[it->trainIdx]);
+            subset_left.descriptors.push_back(features_left.descriptors.row(it->trainIdx));
+        }
     }
+    else
+    {
+        subset_left = features_left;
+    }
+
     std::cout<<"features_left.keypoints: "<<features_left.keypoints.size()<<"\n";
-    std::cout<<"features_left.descriptors: "<<features_left.descriptors.rows<<"\n";
+    std::cout<<"features_left.descriptors: "<<features_left.descriptors.size()<<"\n";
     std::cout<<"subset_left.keypoints: "<<subset_left.keypoints.size()<<"\n";
     std::cout<<"subset_left.descriptors: "<<subset_left.descriptors.size()<<"\n";
 
@@ -436,17 +454,23 @@ void Task::intraFeatures(const cv::detail::ImageFeatures &features_left,
     /** Subset current features from right pair matches **/
     cv::detail::ImageFeatures subset_right;
     subset_right.descriptors = cv::Mat(0, length, CV_32FC1);
-    for (std::vector<cv::DMatch>::const_iterator it= matches_right.begin(); it!= matches_right.end(); ++it)
+    if (matches_right.size() > 0)
     {
-        subset_right.keypoints.push_back(features_right.keypoints[it->trainIdx]);
-        subset_right.descriptors.push_back(features_right.descriptors.row(it->trainIdx));
+        for (std::vector<cv::DMatch>::const_iterator it= matches_right.begin(); it!= matches_right.end(); ++it)
+        {
+            subset_right.keypoints.push_back(features_right.keypoints[it->trainIdx]);
+            subset_right.descriptors.push_back(features_right.descriptors.row(it->trainIdx));
+        }
+    }
+    else
+    {
+        subset_right = features_right;
     }
 
     std::cout<<"features_right.keypoints: "<<features_right.keypoints.size()<<"\n";
-    std::cout<<"features_right.descriptors: "<<features_right.descriptors.rows<<"\n";
+    std::cout<<"features_right.descriptors: "<<features_right.descriptors.size()<<"\n";
     std::cout<<"subset_right.keypoints: "<<subset_right.keypoints.size()<<"\n";
     std::cout<<"subset_right.descriptors: "<<subset_right.descriptors.size()<<"\n";
-
 
     /** Match left and right subsets descriptors using flann **/
     cv::FlannBasedMatcher matcher;
@@ -460,6 +484,7 @@ void Task::intraFeatures(const cv::detail::ImageFeatures &features_left,
         {
             float dy_point = std::fabs(subset_left.keypoints[it->queryIdx].pt.y - subset_right.keypoints[it->trainIdx].pt.y);
             float dy_center = std::fabs(this->cameracalib.camLeft.cy - this->cameracalib.camRight.cy);
+
             /** Epipolar line **/
             if (dy_point <= 5.0 * dy_center)
             {
@@ -471,6 +496,42 @@ void Task::intraFeatures(const cv::detail::ImageFeatures &features_left,
     final_left = subset_left;
     final_right = subset_right;
 
+    std::cout<<"final_left.keypoints: "<<final_left.keypoints.size()<<"\n";
+    std::cout<<"final_left.descriptors: "<<final_left.descriptors.size()<<"\n";
+    std::cout<<"final_right.keypoints: "<<final_right.keypoints.size()<<"\n";
+    std::cout<<"final_right.descriptors: "<<final_right.descriptors.size()<<"\n";
+    std::cout<<"intra_matches: "<<intra_matches.size()<<"\n";
+
     return;
+}
+
+
+void Task::hashFeatures (const cv::Mat &new_descriptors)
+{
+    cv::SurfFeatureDetector detector;
+    const int length = detector.descriptorSize();
+
+    /** Hash descriptors from the table **/
+    std::vector<boost::uuids::uuid> uuid_descriptors;
+    cv::Mat hash_descriptors;
+    hash_descriptors = cv::Mat(0, length, CV_32FC1);
+    for (boost::unordered_map<boost::uuids::uuid, Feature>::iterator it = this->features_hash.begin(); it != this->features_hash.end(); ++it)
+    {
+            uuid_descriptors.push_back(it->first);
+            hash_descriptors.push_back(it->second.descriptor);
+    }
+
+    /** Match with the current descriptors **/
+    cv::FlannBasedMatcher matcher;
+    std::vector<cv::DMatch> matches;
+    matcher.match(hash_descriptors, new_descriptors, matches);
+
+    /** Update hash with matches **/
+    for (std::vector<cv::DMatch>::const_iterator it= matches.begin(); it!= matches.end(); ++it)
+    {
+        uuid_descriptors[it->queryIdx];
+        hash_descriptors.row(it->queryIdx);
+    }
+
 }
 

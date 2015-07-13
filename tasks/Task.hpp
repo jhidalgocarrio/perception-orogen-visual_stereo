@@ -15,13 +15,17 @@
 #include <opencv/highgui.h>
 
 /** Rock libraries **/
-#include "frame_helper/FrameHelper.h" /** Rock lib for manipulate frames **/
-#include "frame_helper/FrameHelperTypes.h" /** Types for FrameHelper **/
-#include "frame_helper/Calibration.h" /** Rock type for camera calibration parameters **/
-#include "frame_helper/CalibrationCv.h" /** Rock type for camera OpenCv calibration **/
+#include <frame_helper/FrameHelper.h> /** Rock lib for manipulate frames **/
+#include <frame_helper/FrameHelperTypes.h> /** Types for FrameHelper **/
+#include <frame_helper/Calibration.h> /** Rock type for camera calibration parameters **/
+#include <frame_helper/CalibrationCv.h> /** Rock type for camera OpenCv calibration **/
 
 /** Rock Types **/
-#include <base/samples/DistanceImage.hpp>
+#include <base/Eigen.hpp>
+
+/** Boost **/
+#include <boost/uuid/uuid.hpp>
+#include <boost/unordered_map.hpp>
 
 /** Standard **/
 #include <cmath>
@@ -31,14 +35,23 @@
 
 namespace visual_stereo {
 
+    struct Feature
+    {
+        int img_idx;
+        cv::KeyPoint keypoint;
+        cv::Mat descriptor;
+        base::Vector3d point;
+        base::Matrix3d cov; /** Covariance matrix of the 3d point**/
+    };
+
     /*! \class Task 
      * \brief The task context provides and requires services. It uses an ExecutionEngine to perform its functions.
      * Essential interfaces are operations, data flow ports and properties. These interfaces have been defined using the oroGen specification.
      * In order to modify the interfaces you should (re)use oroGen and rely on the associated workflow.
      * Declare a new task context (i.e., a component)
 
-The corresponding C++ class can be edited in tasks/Task.hpp and
-tasks/Task.cpp, and will be put in the visual_stereo namespace.
+    The corresponding C++ class can be edited in tasks/Task.hpp and
+    tasks/Task.cpp, and will be put in the visual_stereo namespace.
      * \details
      * The name of a TaskContext is primarily defined via:
      \verbatim
@@ -72,13 +85,14 @@ tasks/Task.cpp, and will be put in the visual_stereo namespace.
         /******************************************/
         int frame_idx; // incremental stereo pair index
         base::samples::frame::FramePair frame_pair; /** Left and right images **/
-        base::samples::frame::FramePair frame_previous_pair; /** Left and right images **/
         frame_helper::FrameHelper frameHelperLeft, frameHelperRight; /** Frame helper **/
         ::base::Matrix2d pxleftVar, pxrightVar; /** Error variance of image plane in pixel units **/
         Eigen::Matrix4d Q; /** Re-projection matrix **/
         cv::detail::ImageFeatures fcurrent_left, fcurrent_right, fprevious_left, fprevious_right;
         std::vector< cv::DMatch > intra_matches, inter_matches_left, inter_matches_right;
         cv::detail::ImageFeatures ffinal_left, ffinal_right;
+
+        boost::unordered_map<boost::uuids::uuid, Feature> features_hash; /** current to previous index **/
 
         /***************************/
         /** Output Port Variables **/
@@ -174,8 +188,8 @@ tasks/Task.cpp, and will be put in the visual_stereo namespace.
                         cv::detail::ImageFeatures &features_left,
                         cv::detail::ImageFeatures &features_right);
 
-        void interMatches (cv::detail::ImageFeatures &features_previous,
-                        cv::detail::ImageFeatures &features_current,
+        void interMatches (const cv::detail::ImageFeatures &features_previous,
+                        const cv::detail::ImageFeatures &features_current,
                         std::vector< cv::DMatch > &good_matches);
 
         void drawMatches(const base::samples::frame::Frame &frame1,
@@ -189,7 +203,7 @@ tasks/Task.cpp, and will be put in the visual_stereo namespace.
                 std::vector<cv::KeyPoint> &keypoints2,
                 std::vector<cv::DMatch> &matches);
 
-        void intraFeatures(const cv::detail::ImageFeatures &features_left,
+        void intraMatches(const cv::detail::ImageFeatures &features_left,
                     const cv::detail::ImageFeatures &features_right,
                     const std::vector<cv::DMatch> &matches_left,
                     const std::vector<cv::DMatch> &matches_right,
@@ -197,6 +211,7 @@ tasks/Task.cpp, and will be put in the visual_stereo namespace.
                     cv::detail::ImageFeatures &final_right,
                     std::vector<cv::DMatch> &intra_matches);
 
+         void hashFeatures(const cv::Mat &new_descriptors);
     };
 }
 
