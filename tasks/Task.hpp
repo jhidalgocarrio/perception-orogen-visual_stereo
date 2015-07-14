@@ -25,12 +25,14 @@
 
 /** Boost **/
 #include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <boost/unordered_map.hpp>
+#include <boost/lexical_cast.hpp> //to convert int to string in C++03
 
 /** Standard **/
-#include <cmath>
-#include <vector>
-#include <map>
+#include <cmath> // math functions
+#include <vector> //std::vector
+#include <algorithm>  // std::fill
 
 
 namespace visual_stereo {
@@ -42,6 +44,13 @@ namespace visual_stereo {
         cv::Mat descriptor;
         base::Vector3d point;
         base::Matrix3d cov; /** Covariance matrix of the 3d point**/
+
+        Feature(const int _img_idx, const cv::KeyPoint &_keypoint, const cv::Mat &_descriptor)
+        {
+            img_idx = _img_idx;
+            keypoint = _keypoint;
+            descriptor = _descriptor;
+        }
     };
 
     /*! \class Task 
@@ -92,12 +101,13 @@ namespace visual_stereo {
         std::vector< cv::DMatch > intra_matches, inter_matches_left, inter_matches_right;
         cv::detail::ImageFeatures ffinal_left, ffinal_right;
 
-        boost::unordered_map<boost::uuids::uuid, Feature> features_hash; /** current to previous index **/
+        boost::unordered_map<boost::uuids::uuid, Feature> hash_features; /** current to previous index **/
 
         /***************************/
         /** Output Port Variables **/
         /***************************/
         RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> frame_out; /** Debug intra frame image **/
+        RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> frame_bis_out; /** Debug intra frame image **/
 
     protected:
 
@@ -199,9 +209,10 @@ namespace visual_stereo {
                 std::vector<cv::DMatch> &matches);
 
         void drawKeypoints(const base::samples::frame::Frame &frame2,
-                std::vector<cv::KeyPoint> &keypoints1,
-                std::vector<cv::KeyPoint> &keypoints2,
-                std::vector<cv::DMatch> &matches);
+                const std::vector<cv::KeyPoint> &keypoints1,
+                const std::vector<cv::KeyPoint> &keypoints2,
+                const std::vector<cv::DMatch> &matches,
+                const boost::unordered_map<boost::uuids::uuid, Feature> &hash);
 
         void intraMatches(const cv::detail::ImageFeatures &features_left,
                     const cv::detail::ImageFeatures &features_right,
@@ -211,7 +222,13 @@ namespace visual_stereo {
                     cv::detail::ImageFeatures &final_right,
                     std::vector<cv::DMatch> &intra_matches);
 
-         void hashFeatures(const cv::Mat &new_descriptors);
+        void hashFeatures (const cv::detail::ImageFeatures &new_features,
+                        const std::vector< cv::DMatch > &good_matches);
+
+        void cleanHashFeatures (const int current_idx,
+                        const int max_number_img,
+                        boost::unordered_map<boost::uuids::uuid, Feature> &hash);
+
     };
 }
 

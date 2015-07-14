@@ -77,6 +77,10 @@ task_context "Task" do
         doc 'Intra (Left - Right) frame correspondences image.'+
             'Inter (Keypoints) in the image.'
 
+    output_port("frame_samples_bis_out",  ro_ptr('base::samples::frame::Frame')).
+        doc 'Intra (Left - Right) frame correspondences image.'+
+            'Inter (Keypoints) in the image.'
+
     port_driven
 end
 
