@@ -8,13 +8,20 @@
  * which case you do not need this file
  */
 
+#include <boost/uuid/uuid.hpp>
 #include <base/Time.hpp>
 #include <base/Eigen.hpp>
 
 namespace visual_stereo {
 
     /**  Type for image output **/
-    enum IMAGE_OUTPUT_TYPE{INTRA_MATCHES, INTER_KEYPOINTS};
+    enum IMAGE_OUTPUT_TYPE{INTRA_MATCHES, INTER_KEYPOINTS, INTRA_AND_INTER};
+
+    struct RansacParameters
+    {
+        double ransac_max_distance; /** Maximum distance from a point to an epipolar line in pixels */
+        double ransac_confidence; /** Desirable level of confidence (probability) */
+    };
 
     struct Info
     {
@@ -25,6 +32,7 @@ namespace visual_stereo {
         base::Time compute_time;
     };
 
+    typedef boost::uuids::uuid image_uuid;
 }
 
 #endif

@@ -36,6 +36,14 @@ task_context "Task" do
         doc "resize algorithm which is used to scale the frame before it is written to the output port. "
             "allowed values are INTER_LINEAR, INTER_NEAREST, INTER_AREA, INTER_CUBIC, INTER_LANCZOS4, BAYER_RESIZE."
 
+    property("minimum_hessian", "unsigned int", 400).
+        doc "Determinate value for Hessian matrix. Threshold to decide from which value you are willing to accept keypoints."+
+            "The lower the minHessian, the more keypoints you get, but they may be more noisy."+
+            "In usual images, a value between 400 and 800 works well."
+
+    property("color_features_out", "bool", false).
+        doc "color features in the output port."
+
     #******************************
     #******* Input ports  *********
     #******************************
@@ -63,23 +71,29 @@ task_context "Task" do
     #******************************
     #******* Output Ports *********
     #******************************
+    output_port("features_uuid_out",  'std::vector<boost::uuids::uuid>').
+        doc 'Features 3d point of the current stereo pair.'
+
+    output_port("features_point_out",  'base::samples::Pointcloud').
+        doc 'Features 3d point of the current stereo pair.'
+
+    output_port("features_covariance_out", 'std::vector<base::Matrix3d>').
+        doc 'Features covariace of the current stereo pair.'
 
     #******************************
     #******* Debug Ports **********
     #******************************
     property('output_debug', 'bool', false).
-	doc 'Set to true if output debug information is desirable.'
+	    doc 'Set to true if output debug information is desirable.'
 
     property('image_ouput_type', 'visual_stereo::IMAGE_OUTPUT_TYPE').
-	doc 'Image output type.'
+	    doc 'Images output type.'
 
-    output_port("frame_samples_out",  ro_ptr('base::samples::frame::Frame')).
-        doc 'Intra (Left - Right) frame correspondences image.'+
-            'Inter (Keypoints) in the image.'
+    output_port("intra_frame_samples_out",  ro_ptr('base::samples::frame::Frame')).
+        doc 'Intra (Left - Right) frame correspondences image.'
 
-    output_port("frame_samples_bis_out",  ro_ptr('base::samples::frame::Frame')).
-        doc 'Intra (Left - Right) frame correspondences image.'+
-            'Inter (Keypoints) in the image.'
+    output_port("inter_frame_samples_out",  ro_ptr('base::samples::frame::Frame')).
+        doc 'Inter (Keypoints) in the image to the next.'
 
     port_driven
 end

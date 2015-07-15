@@ -2,7 +2,7 @@
 
 #include "Task.hpp"
 
-#define DEBUG_PRINTS 1
+//#define DEBUG_PRINTS 1
 
 #ifndef D2R
 #define D2R M_PI/180.00 /** Convert degree to radian **/
@@ -39,6 +39,13 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
     frame_pair.first.init(left_frame_sample->size.width, left_frame_sample->size.height, left_frame_sample->getDataDepth(), base::samples::frame::MODE_GRAYSCALE);
     frameHelperLeft.convert (*left_frame_sample, frame_pair.first, 0, 0, _resize_algorithm.value(), true);
 
+    /** Left color image **/
+    if (_color_features_out.get())
+    {
+        left_color_frame.init(left_frame_sample->size.width, left_frame_sample->size.height, left_frame_sample->getDataDepth(), base::samples::frame::MODE_RGB);
+        frameHelperLeft.convert (*left_frame_sample, left_color_frame, 0, 0, _resize_algorithm.value(), true);
+    }
+
     /** If the difference in time is less than half of a period run the odometry **/
     base::Time diffTime = frame_pair.first.time - frame_pair.second.time;
 
@@ -64,19 +71,26 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
                                 inter_matches_left, inter_matches_right,
                                 ffinal_left, ffinal_right, intra_matches);
 
-            this->hashFeatures(ffinal_left, intra_matches);
+            this->hashFeatures(ffinal_left, ffinal_right, intra_matches);
+
+            this->featuresOut(ffinal_left.img_idx, this->hash_features);
 
             /** Draw good matches **/
             if (_output_debug.value())
             {
-                //if (_image_ouput_type.get() == visual_stereo::INTRA_MATCHES)
-                //{
+                switch (_image_ouput_type.get())
+                {
+                case visual_stereo::INTRA_MATCHES:
                     this->drawMatches(frame_pair.first, frame_pair.second, ffinal_left.keypoints, ffinal_right.keypoints, intra_matches);
-                //}
-                //else if (_image_ouput_type.get() == visual_stereo::INTER_KEYPOINTS)
-                //{
+                    break;
+                case visual_stereo::INTER_KEYPOINTS:
                     this->drawKeypoints(frame_pair.first, fprevious_left.keypoints, fcurrent_left.keypoints, inter_matches_left, hash_features);
-                //}
+                    break;
+                case visual_stereo::INTRA_AND_INTER:
+                    this->drawMatches(frame_pair.first, frame_pair.second, ffinal_left.keypoints, ffinal_right.keypoints, intra_matches);
+                    this->drawKeypoints(frame_pair.first, fprevious_left.keypoints, fcurrent_left.keypoints, inter_matches_left, hash_features);
+                    break;
+                }
             }
         }
     }
@@ -119,20 +133,27 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
                                 inter_matches_left, inter_matches_right,
                                 ffinal_left, ffinal_right, intra_matches);
 
-            this->hashFeatures(ffinal_left, intra_matches);
+            this->hashFeatures(ffinal_left, ffinal_right, intra_matches);
+
+            this->featuresOut(ffinal_left.img_idx, this->hash_features);
 
             /** Draw good matches **/
             if (_output_debug.value())
             {
-                //if (_image_ouput_type.get() == visual_stereo::INTRA_MATCHES)
-                //{
+                switch (_image_ouput_type.get())
+                {
+                case visual_stereo::INTRA_MATCHES:
                     this->drawMatches(frame_pair.first, frame_pair.second, ffinal_left.keypoints, ffinal_right.keypoints, intra_matches);
-                //}
-                //else if (_image_ouput_type.get() == visual_stereo::INTER_KEYPOINTS)
-                //{
+                    break;
+                case visual_stereo::INTER_KEYPOINTS:
                     this->drawKeypoints(frame_pair.first, fprevious_left.keypoints, fcurrent_left.keypoints, inter_matches_left, hash_features);
-                //}
-            }
+                    break;
+                case visual_stereo::INTRA_AND_INTER:
+                    this->drawMatches(frame_pair.first, frame_pair.second, ffinal_left.keypoints, ffinal_right.keypoints, intra_matches);
+                    this->drawKeypoints(frame_pair.first, fprevious_left.keypoints, fcurrent_left.keypoints, inter_matches_left, hash_features);
+                    break;
+                }
+           }
         }
     }
 
@@ -151,6 +172,9 @@ bool Task::configureHook()
 
     /** Frame index **/
     frame_idx = 0;
+
+    /** Frame history to keep in the hash **/
+    this->frame_window_hash_size = 10;
 
     /** Read the camera calibration parameters **/
     this->cameracalib = _calib_parameters.value();
@@ -185,8 +209,8 @@ bool Task::configureHook()
     /** Initialize output frame **/
     ::base::samples::frame::Frame *outframe = new ::base::samples::frame::Frame();
 
-    this->frame_out.reset(outframe);
-    this->frame_bis_out.reset(outframe);
+    this->intra_frame_out.reset(outframe);
+    this->inter_frame_out.reset(outframe);
     outframe = NULL;
 
     return true;
@@ -236,7 +260,7 @@ void Task::detectFeatures (const base::samples::frame::Frame &frame_left,
     cv::Mat img_r = frameHelperRight.convertToCvMat(frame_right);
 
     /** Detect Keypoints **/
-    int minHessian = 400;
+    int minHessian = _minimum_hessian.get();
 
     cv::SurfFeatureDetector detector(minHessian);
     std::vector<cv::KeyPoint> keypoints_l, keypoints_r;
@@ -257,12 +281,14 @@ void Task::detectFeatures (const base::samples::frame::Frame &frame_left,
     features_left.descriptors = descriptors_l;
     features_right.descriptors = descriptors_r;
 
+    #ifdef DEBUG_PRINTS
     std::cout<<"DETECTING...IDX["<<features_left.img_idx<<","<<features_right.img_idx<<"]\n";
     std::cout<<"features_left.keypoints: "<<features_left.keypoints.size()<<"\n";
     std::cout<<"features_left.descriptors: "<<features_left.descriptors.size()<<"\n";
     std::cout<<"features_right.keypoints: "<<features_right.keypoints.size()<<"\n";
     std::cout<<"features_right.descriptors: "<<features_right.descriptors.size()<<"\n";
     std::cout<<"...[OK]\n";
+    #endif
 
     return;
 }
@@ -276,7 +302,6 @@ void Task::interMatches (const cv::detail::ImageFeatures &features_previous,
     cv::FlannBasedMatcher matcher;
     std::vector< cv::DMatch > matches;
     matcher.match(features_previous.descriptors, features_current.descriptors, matches);
-    std::cout<<"inter_matches: "<<matches.size()<<"\n";
 
     /** Extract matches points **/
     std::vector<cv::Point2f> points1, points2;
@@ -362,7 +387,9 @@ void Task::interMatches (const cv::detail::ImageFeatures &features_previous,
     }
 
     good_matches = ref_matches;
-    std::cout<<"good_matches: "<<good_matches.size()<<"\n";
+    #ifdef DEBUG_PRINTS
+    std::cout<<"[INTER_MATCHES] good_matches: "<<good_matches.size()<<"\n";
+    #endif
 
     return;
 }
@@ -382,12 +409,12 @@ void Task::drawMatches(const base::samples::frame::Frame &frame1,
     cv::drawMatches (img1, keypoints1, img2, keypoints2, matches, img_out,
     cv::Scalar::all(-1), cv::Scalar::all(-1), cv::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
 
-    ::base::samples::frame::Frame *frame_ptr = this->frame_out.write_access();
+    ::base::samples::frame::Frame *frame_ptr = this->intra_frame_out.write_access();
     frameHelperLeft.copyMatToFrame(img_out, *frame_ptr);
 
     frame_ptr->time = this->frame_pair.time;
-    this->frame_out.reset(frame_ptr);
-    _frame_samples_out.write(this->frame_out);
+    this->intra_frame_out.reset(frame_ptr);
+    _intra_frame_samples_out.write(this->intra_frame_out);
 
     return;
 }
@@ -397,7 +424,7 @@ void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
                 const std::vector<cv::KeyPoint> &keypoints1,
                 const std::vector<cv::KeyPoint> &keypoints2,
                 const std::vector<cv::DMatch> &matches,
-                const boost::unordered_map<boost::uuids::uuid, Feature> &hash)
+                const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash)
 
 {
     /** Convert Images to opencv **/
@@ -417,21 +444,21 @@ void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
     }
 
     /** Draw hash features **/
-    for (boost::unordered_map<boost::uuids::uuid, Feature>::const_iterator
+    for (boost::unordered_map<boost::uuids::uuid, StereoFeature>::const_iterator
                     it = hash.begin(); it != hash.end(); ++it)
     {
-        float red = 255 - (25.0*(this->ffinal_left.img_idx-it->second.img_idx));
-        cv::circle(img_out, it->second.keypoint.pt, 5, cv::Scalar(0, 0, red), 2);
+        float red = 255.0 - (255.0/(this->frame_window_hash_size)*(this->ffinal_left.img_idx-it->second.img_idx));
+        cv::circle(img_out, it->second.keypoint_left.pt, 5, cv::Scalar(0, 0, red), 2);
         cv::putText(img_out, boost::lexical_cast<std::string>(it->second.img_idx),
-                it->second.keypoint.pt, cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(0,0,0), 1.5);
+                it->second.keypoint_left.pt, cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(0,0,0), 1.5);
     }
 
-    ::base::samples::frame::Frame *frame_ptr = this->frame_bis_out.write_access();
+    ::base::samples::frame::Frame *frame_ptr = this->inter_frame_out.write_access();
     frameHelperLeft.copyMatToFrame(img_out, *frame_ptr);
 
     frame_ptr->time = this->frame_pair.time;
-    this->frame_bis_out.reset(frame_ptr);
-    _frame_samples_bis_out.write(this->frame_bis_out);
+    this->inter_frame_out.reset(frame_ptr);
+    _inter_frame_samples_out.write(this->inter_frame_out);
 
     return;
 }
@@ -464,10 +491,12 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
         subset_left = features_left;
     }
 
-    std::cout<<"features_left.keypoints: "<<features_left.keypoints.size()<<"\n";
-    std::cout<<"features_left.descriptors: "<<features_left.descriptors.size()<<"\n";
+    //std::cout<<"features_left.keypoints: "<<features_left.keypoints.size()<<"\n";
+    //std::cout<<"features_left.descriptors: "<<features_left.descriptors.size()<<"\n";
+    #ifdef DEBUG_PRINTS
     std::cout<<"subset_left.keypoints: "<<subset_left.keypoints.size()<<"\n";
     std::cout<<"subset_left.descriptors: "<<subset_left.descriptors.size()<<"\n";
+    #endif
 
 
     /** Subset current features from right pair matches **/
@@ -487,10 +516,12 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
         subset_right = features_right;
     }
 
-    std::cout<<"features_right.keypoints: "<<features_right.keypoints.size()<<"\n";
-    std::cout<<"features_right.descriptors: "<<features_right.descriptors.size()<<"\n";
+    //std::cout<<"features_right.keypoints: "<<features_right.keypoints.size()<<"\n";
+    //std::cout<<"features_right.descriptors: "<<features_right.descriptors.size()<<"\n";
+    #ifdef DEBUG_PRINTS
     std::cout<<"subset_right.keypoints: "<<subset_right.keypoints.size()<<"\n";
     std::cout<<"subset_right.descriptors: "<<subset_right.descriptors.size()<<"\n";
+    #endif
 
     /** Match left and right subsets descriptors using flann **/
     cv::FlannBasedMatcher matcher;
@@ -516,77 +547,89 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
     final_left = subset_left;
     final_right = subset_right;
 
-    std::cout<<"final_left.keypoints: "<<final_left.keypoints.size()<<"\n";
-    std::cout<<"final_left.descriptors: "<<final_left.descriptors.size()<<"\n";
-    std::cout<<"final_right.keypoints: "<<final_right.keypoints.size()<<"\n";
-    std::cout<<"final_right.descriptors: "<<final_right.descriptors.size()<<"\n";
-    std::cout<<"intra_matches: "<<intra_matches.size()<<"\n";
-
+    #ifdef DEBUG_PRINTS
+    std::cout<<"[INTRA_MATCHES] final_left.keypoints: "<<final_left.keypoints.size()<<"\n";
+    std::cout<<"[INTRA_MATCHES] final_left.descriptors: "<<final_left.descriptors.size()<<"\n";
+    std::cout<<"[INTRA_MATCHES] final_right.keypoints: "<<final_right.keypoints.size()<<"\n";
+    std::cout<<"[INTRA_MATCHES] final_right.descriptors: "<<final_right.descriptors.size()<<"\n";
+    std::cout<<"[INTRA_MATCHES] intra_matches: "<<intra_matches.size()<<"\n";
+    #endif
     return;
 }
 
 
-void Task::hashFeatures (const cv::detail::ImageFeatures &new_features,
+void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
+                        const cv::detail::ImageFeatures &new_features_right,
                         const std::vector< cv::DMatch > &good_matches)
 {
-    cv::detail::ImageFeatures subset_features;
+    cv::detail::ImageFeatures subset_features_left, subset_features_right;
     cv::SurfFeatureDetector detector;
     const int length = detector.descriptorSize();
 
-    /** Subset the local features with only  existing matches **/
-    subset_features.img_idx = new_features.img_idx;
+    /** Subset the local features with only existing matches **/
+    subset_features_left.img_idx = new_features_left.img_idx;
     for (std::vector<cv::DMatch>::const_iterator it= good_matches.begin(); it!= good_matches.end(); ++it)
     {
-        subset_features.keypoints.push_back(new_features.keypoints[it->queryIdx]);
-        subset_features.descriptors.push_back(new_features.descriptors.row(it->queryIdx));
+        /** left[i] matches with right[i] **/
+        subset_features_left.keypoints.push_back(new_features_left.keypoints[it->queryIdx]);
+        subset_features_left.descriptors.push_back(new_features_left.descriptors.row(it->queryIdx));
+        subset_features_right.keypoints.push_back(new_features_right.keypoints[it->trainIdx]);
+        subset_features_right.descriptors.push_back(new_features_right.descriptors.row(it->trainIdx));
     }
 
-    std::cout<<"[HASH_FEATURES] subset_features.keypoints.size(): "<<subset_features.keypoints.size()<<"\n";
-    std::cout<<"[HASH_FEATURES] subset_features.descriptors.size(): "<<subset_features.descriptors.size()<<"\n";
+    #ifdef DEBUG_PRINTS
+    std::cout<<"[HASH_FEATURES] subset_features_left.keypoints.size(): "<<subset_features_left.keypoints.size()<<"\n";
+    std::cout<<"[HASH_FEATURES] subset_features_left.descriptors.size(): "<<subset_features_left.descriptors.size()<<"\n";
+    std::cout<<"[HASH_FEATURES] subset_features_right.keypoints.size(): "<<subset_features_right.keypoints.size()<<"\n";
+    std::cout<<"[HASH_FEATURES] subset_features_right.descriptors.size(): "<<subset_features_right.descriptors.size()<<"\n";
+    #endif
 
     /** Hash descriptors from the table **/
     std::vector<boost::uuids::uuid> uuid_descriptors;
     cv::Mat hash_descriptors;
     hash_descriptors = cv::Mat(0, length, CV_32FC1);
-    for (boost::unordered_map<boost::uuids::uuid, Feature>::const_iterator it = this->hash_features.begin(); it != this->hash_features.end(); ++it)
+    for (boost::unordered_map<boost::uuids::uuid, StereoFeature>::const_iterator it = this->hash_features.begin(); it != this->hash_features.end(); ++it)
     {
         uuid_descriptors.push_back(it->first);
         hash_descriptors.push_back(it->second.descriptor);
     }
 
+    #ifdef DEBUG_PRINTS
     std::cout<<"[HASH_FEATURES] hash_features.size(): "<<hash_features.size()<<"\n";
     std::cout<<"[HASH_FEATURES] uuid_descriptors.size(): "<<uuid_descriptors.size()<<"\n";
     std::cout<<"[HASH_FEATURES] hash_descriptors.size(): "<<hash_descriptors.size()<<"\n";
+    #endif
 
-    /** Match with the current descriptors **/
+    /** Match with the current descriptors from left features **/
     bool direct_match = true;
     cv::FlannBasedMatcher matcher;
     std::vector<cv::DMatch> matches;
-    std::vector<bool> copy_features(subset_features.descriptors.rows, true);
-    if (hash_descriptors.rows > subset_features.descriptors.rows)
+    std::vector<bool> copy_features(subset_features_left.descriptors.rows, true);
+    if (hash_descriptors.rows > subset_features_left.descriptors.rows)
     {
-        matcher.match(subset_features.descriptors, hash_descriptors, matches);
+        matcher.match(subset_features_left.descriptors, hash_descriptors, matches);
         direct_match = true;
-        copy_features.resize(subset_features.descriptors.rows);
+        copy_features.resize(subset_features_left.descriptors.rows);
         std::fill(copy_features.begin(), copy_features.end(), true);
     }
     else if (hash_descriptors.rows > 0)
     {
-        matcher.match(hash_descriptors, subset_features.descriptors, matches);
+        matcher.match(hash_descriptors, subset_features_left.descriptors, matches);
         direct_match = false;
         copy_features.resize(hash_descriptors.rows);
         std::fill(copy_features.begin(), copy_features.end(), true);
     }
 
-    std::cout<<"copy_features.size(): "<<copy_features.size()<<"\n";
-    std::cout<<"[HASH_FEATURES] found "<<matches.size()<<" matches ";
-    std::cout<<"with method ("<<direct_match<<")\n";
+    #ifdef DEBUG_PRINTS
+    std::cout<<"[HASH_FEATURES] copy_features.size(): "<<copy_features.size()<<"\n";
+    std::cout<<"[HASH_FEATURES] found "<<matches.size()<<" matches\n";
+    #endif
 
     /** Update hash with matches **/
     register int index_copy = 0;
     for (std::vector<cv::DMatch>::const_iterator it = matches.begin(); it != matches.end(); ++it)
     {
-        boost::unordered_map<boost::uuids::uuid, Feature>::iterator got;
+        boost::unordered_map<boost::uuids::uuid, StereoFeature>::iterator got;
         short int hash_idx, feature_idx;
 
         if (direct_match)
@@ -607,16 +650,20 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features,
         {
             //std::cout<<"[HASH_FEATURES] uuid:"<<boost::uuids::to_string(got->first)<<"\n";
             //std::cout<<"[HASH_FEATURES] hash_features point: "<<got->second.keypoint.pt<<"\n";
-            //std::cout<<"[HASH_FEATURES] new_features_copy point: "<<subset_features.keypoints[feature_idx].pt<<"\n";
+            //std::cout<<"[HASH_FEATURES] new_features_copy point: "<<subset_features_left.keypoints[feature_idx].pt<<"\n";
 
-            got->second.img_idx = subset_features.img_idx;
-            got->second.keypoint = subset_features.keypoints[feature_idx];
-            got->second.descriptor = subset_features.descriptors.row(feature_idx);
+            got->second.img_idx = subset_features_left.img_idx;
+            got->second.keypoint_left = subset_features_left.keypoints[feature_idx];
+            got->second.keypoint_right = subset_features_right.keypoints[feature_idx];
+            got->second.descriptor = subset_features_left.descriptors.row(feature_idx);
             copy_features[feature_idx] = false;
             index_copy++;
         }
     }
+
+    #ifdef DEBUG_PRINTS
     std::cout<<"[HASH_FEATURES] Updated "<<index_copy<<" features into hash\n";
+    #endif
 
     /** Increase hash with features which did not have matches **/
     register int index = 0;
@@ -630,48 +677,138 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features,
             /** Compute the 3d point and covariance of the feature **/
 
             /** Create the feature **/
-            visual_stereo::Feature f (subset_features.img_idx,
-                                    subset_features.keypoints[index],
-                                    subset_features.descriptors.row(index));
+            visual_stereo::StereoFeature f (subset_features_left.img_idx,
+                                    subset_features_left.keypoints[index],
+                                    subset_features_right.keypoints[index],
+                                    subset_features_left.descriptors.row(index));
 
             /** Insert new feature in the hash **/
-            this->hash_features.insert(std::make_pair<boost::uuids::uuid, Feature>
+            this->hash_features.insert(std::make_pair<boost::uuids::uuid, StereoFeature>
                     (boost::uuids::random_generator()(), f));
+
+            #ifdef DEBUG_PRINTS
             index_copy++;
+            #endif
         }
         index++;
     }
 
+    #ifdef DEBUG_PRINTS
     std::cout<<"[HASH_FEATURES] New "<<index_copy<<" features into hash\n";
+    #endif
 
-    this->cleanHashFeatures(new_features.img_idx, 10, this->hash_features);
+    this->cleanHashFeatures(new_features_left.img_idx,
+                            this->frame_window_hash_size,
+                            this->hash_features);
 
 
     return;
 }
 
-void Task::cleanHashFeatures (const int current_idx,
+void Task::cleanHashFeatures (const int current_image_idx,
                         const int max_number_img,
-                        boost::unordered_map<boost::uuids::uuid, Feature> &hash)
+                        boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash)
 {
-    if (current_idx > max_number_img)
+    if (current_image_idx > max_number_img)
     {
-            const int border_idx = (current_idx - max_number_img);
-            std::cout<<"[CLEAN_HASH] Eliminate features with idx <= "<<border_idx<<"\n";
+            const int border_image_idx = (current_image_idx - max_number_img);
 
-            register int i = 0;
-            /** All the images with idx <= border_idx should be eliminated **/
-            for (boost::unordered_map<boost::uuids::uuid, Feature>::const_iterator
+            /** All the images with idx <= border_image_idx should be eliminated **/
+            for (boost::unordered_map<boost::uuids::uuid, StereoFeature>::const_iterator
                     it = hash.begin(); it != hash.end(); ++it)
             {
-                if (it->second.img_idx <= border_idx)
+                if (it->second.img_idx <= border_image_idx)
                 {
                     hash.erase(it);
-                    i++;
                 }
             }
-            std::cout<<"[CLEAN_HASH] Eliminated "<<i<<" features\n";
     }
+
+    return;
+}
+
+
+void Task::featuresOut(const int current_image_idx, const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash)
+{
+    std::vector<boost::uuids::uuid> features_uuid;
+    base::samples::Pointcloud features_point;
+    std::vector<base::Matrix3d> features_cov;
+    double const &baseline(cameracalib.extrinsic.tx);
+    cv::Mat cv_image1;
+
+    /** Image for the colored points **/
+    if (_color_features_out.get())
+    {
+        cv_image1 = frame_helper::FrameHelper::convertToCvMat(this->left_color_frame);
+    }
+
+    /** Uncertainty in the images (left and right) planes **/
+    Eigen::Matrix4d px_var;
+    px_var << pxleftVar, Eigen::Matrix2d::Zero(),
+        Eigen::Matrix2d::Zero(), pxrightVar;
+
+
+    #ifdef DEBUG_PRINTS
+    std::cout<<"[FEATURES_OUT] Current hash.size(): "<<hash.size()<<"\n";
+    #endif
+
+    /** Parse the hash table of features **/
+    for (boost::unordered_map<boost::uuids::uuid, StereoFeature>::const_iterator
+                    it = hash.begin(); it != hash.end(); ++it)
+    {
+        //std::cout<<"[FEATURES_OUT] img_idx: "<<it->second.img_idx<<" current_idx: "<<current_image_idx<<"\n";
+        if (it->second.img_idx == current_image_idx)
+        {
+            /** Get the uuid **/
+            features_uuid.push_back(it->first);
+
+            /** Compute the 3d point **/
+            cv::Point const &left_pt(it->second.keypoint_left.pt);
+            cv::Point const &right_pt(it->second.keypoint_right.pt);
+            double disparity = std::min(right_pt.x - left_pt.x, -1);
+            base::Vector4d image_point (left_pt.x, left_pt.y, disparity, 1);
+            base::Vector4d homogeneous_point = Q * image_point;
+
+            base::Vector3d point (homogeneous_point(0)/homogeneous_point(3),
+                                homogeneous_point(1)/homogeneous_point(3),
+                                homogeneous_point(2)/homogeneous_point(3));
+            features_point.points.push_back(point);
+            #ifdef DEBUG_PRINTS
+            std::cout<<"[FEATURES_OUT] 3D point:\n"<<point<<"\n";
+            #endif
+
+            /** Color **/
+            if (_color_features_out.get())
+            {
+                cv::Vec3b color = cv_image1.at<cv::Vec3b>(left_pt.y, left_pt.x);
+                base::Vector4d color4d;
+                color4d[0] = color[0]/255.0;//R
+                color4d[1] = color[1]/255.0;//G
+                color4d[2] = color[2]/255.0;//B
+                color4d[3] = 1.0;//Alpha
+                features_point.colors.push_back(color4d);
+            }
+
+            /** Compute the covariance **/
+            Eigen::Matrix<double, 3, 4> noise_jacobian; /** Jacobian Matrix for the triangulation noise model */
+            double disparity_power = pow(disparity,2);
+
+            noise_jacobian <<  -(baseline*right_pt.x)/disparity_power, 0.00, (baseline*left_pt.x)/disparity_power, 0.00,
+                -(baseline*left_pt.y)/disparity_power, baseline/disparity, (baseline*left_pt.y)/disparity_power, 0.00,
+                -(baseline*cameracalib.camLeft.fx)/disparity_power, 0.00,  (baseline*cameracalib.camLeft.fx)/disparity_power, 0.00;
+
+            features_cov.push_back(noise_jacobian * px_var * noise_jacobian.transpose());
+        }
+    }
+
+    #ifdef DEBUG_PRINTS
+    std::cout<<"[FEATURES_OUT] Sent "<<features_uuid.size()<<" vector of uuids\n";
+    #endif
+
+    _features_uuid_out.write(features_uuid);
+    features_point.time = this->frame_pair.time;
+    _features_point_out.write(features_point);
+    _features_covariance_out.write(features_cov);
 
     return;
 }

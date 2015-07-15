@@ -22,6 +22,7 @@
 
 /** Rock Types **/
 #include <base/Eigen.hpp>
+#include <base/samples/Pointcloud.hpp>
 
 /** Boost **/
 #include <boost/uuid/uuid.hpp>
@@ -37,18 +38,23 @@
 
 namespace visual_stereo {
 
-    struct Feature
+    struct StereoFeature
     {
-        int img_idx;
-        cv::KeyPoint keypoint;
-        cv::Mat descriptor;
-        base::Vector3d point;
-        base::Matrix3d cov; /** Covariance matrix of the 3d point**/
+        int img_idx; /** Image id */
+        cv::KeyPoint keypoint_left; /** left keypoint */
+        cv::KeyPoint keypoint_right; /** right keypoint */
+        cv::Mat descriptor; /** One descriptor (i.e. from the left) */
+        base::Vector3d point; /** 3D point */
+        base::Matrix3d cov; /** Covariance matrix of the 3d point */
 
-        Feature(const int _img_idx, const cv::KeyPoint &_keypoint, const cv::Mat &_descriptor)
+        StereoFeature(const int _img_idx,
+                    const cv::KeyPoint &_keypoint_left,
+                    const cv::KeyPoint &_keypoint_right,
+                    const cv::Mat &_descriptor)
         {
             img_idx = _img_idx;
-            keypoint = _keypoint;
+            keypoint_left = _keypoint_left;
+            keypoint_right = _keypoint_right;
             descriptor = _descriptor;
         }
     };
@@ -93,21 +99,23 @@ namespace visual_stereo {
         /*** General Internal Storage Variables ***/
         /******************************************/
         int frame_idx; // incremental stereo pair index
+        int frame_window_hash_size; // number of frame history to keep in the hash
         base::samples::frame::FramePair frame_pair; /** Left and right images **/
         frame_helper::FrameHelper frameHelperLeft, frameHelperRight; /** Frame helper **/
+        ::base::samples::frame::Frame left_color_frame;/** coloring point clouds (if selected) */
         ::base::Matrix2d pxleftVar, pxrightVar; /** Error variance of image plane in pixel units **/
         Eigen::Matrix4d Q; /** Re-projection matrix **/
         cv::detail::ImageFeatures fcurrent_left, fcurrent_right, fprevious_left, fprevious_right;
         std::vector< cv::DMatch > intra_matches, inter_matches_left, inter_matches_right;
         cv::detail::ImageFeatures ffinal_left, ffinal_right;
 
-        boost::unordered_map<boost::uuids::uuid, Feature> hash_features; /** current to previous index **/
+        boost::unordered_map<boost::uuids::uuid, StereoFeature> hash_features; /** current to previous index **/
 
         /***************************/
         /** Output Port Variables **/
         /***************************/
-        RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> frame_out; /** Debug intra frame image **/
-        RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> frame_bis_out; /** Debug intra frame image **/
+        RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> intra_frame_out; /** Debug intra frame image **/
+        RTT::extras::ReadOnlyPointer<base::samples::frame::Frame> inter_frame_out; /** Debug inter frame image **/
 
     protected:
 
@@ -131,7 +139,7 @@ namespace visual_stereo {
 
         /** Default deconstructor of Task
          */
-	~Task();
+	    ~Task();
 
         /** This hook is called by Orocos when the state machine transitions
          * from PreOperational to Stopped. If it returns false, then the
@@ -212,7 +220,7 @@ namespace visual_stereo {
                 const std::vector<cv::KeyPoint> &keypoints1,
                 const std::vector<cv::KeyPoint> &keypoints2,
                 const std::vector<cv::DMatch> &matches,
-                const boost::unordered_map<boost::uuids::uuid, Feature> &hash);
+                const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash);
 
         void intraMatches(const cv::detail::ImageFeatures &features_left,
                     const cv::detail::ImageFeatures &features_right,
@@ -222,13 +230,16 @@ namespace visual_stereo {
                     cv::detail::ImageFeatures &final_right,
                     std::vector<cv::DMatch> &intra_matches);
 
-        void hashFeatures (const cv::detail::ImageFeatures &new_features,
+        void hashFeatures (const cv::detail::ImageFeatures &new_features_left,
+                        const cv::detail::ImageFeatures &new_features_right,
                         const std::vector< cv::DMatch > &good_matches);
 
         void cleanHashFeatures (const int current_idx,
                         const int max_number_img,
-                        boost::unordered_map<boost::uuids::uuid, Feature> &hash);
+                        boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash);
 
+        void featuresOut(const int current_image_idx,
+                        const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash);
     };
 }
 
