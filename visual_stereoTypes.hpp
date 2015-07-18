@@ -8,6 +8,8 @@
  * which case you do not need this file
  */
 
+#include <vector> //std::vector
+
 #include <boost/uuid/uuid.hpp>
 #include <base/Time.hpp>
 #include <base/Eigen.hpp>
@@ -31,6 +33,21 @@ namespace visual_stereo {
         double ratio_inliers;
         base::Time compute_time;
     };
+
+    struct Feature
+    {
+        boost::uuids::uuid index; // Indexes of the points/samples uses to compute the relative measurement
+        base::Vector3d point; // Point cloud used for the delta displacement
+        base::Matrix3d cov; // Covariance of the points/samples uses to compute the relative measurement
+    };
+
+    struct ExteroFeatures
+    {
+        base::Time time;
+        std::vector<Feature> features;
+    };
+
+
 
     typedef boost::uuids::uuid image_uuid;
 }

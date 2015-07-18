@@ -40,7 +40,7 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
     frameHelperLeft.convert (*left_frame_sample, frame_pair.first, 0, 0, _resize_algorithm.value(), true);
 
     /** Left color image **/
-    if (_color_features_out.get())
+    if (_output_debug.get())
     {
         left_color_frame.init(left_frame_sample->size.width, left_frame_sample->size.height, left_frame_sample->getDataDepth(), base::samples::frame::MODE_RGB);
         frameHelperLeft.convert (*left_frame_sample, left_color_frame, 0, 0, _resize_algorithm.value(), true);
@@ -730,22 +730,15 @@ void Task::cleanHashFeatures (const int current_image_idx,
 
 void Task::featuresOut(const int current_image_idx, const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash)
 {
-    std::vector<boost::uuids::uuid> features_uuid;
-    base::samples::Pointcloud features_point;
-    std::vector<base::Matrix3d> features_cov;
+    ExteroFeatures features_samples;
+    base::samples::Pointcloud features_points;
     double const &baseline(cameracalib.extrinsic.tx);
     cv::Mat cv_image1;
 
-    /** Image for the colored points **/
-    if (_color_features_out.get())
-    {
-        cv_image1 = frame_helper::FrameHelper::convertToCvMat(this->left_color_frame);
-    }
-
     /** Uncertainty in the images (left and right) planes **/
     Eigen::Matrix4d px_var;
-    px_var << pxleftVar, Eigen::Matrix2d::Zero(),
-        Eigen::Matrix2d::Zero(), pxrightVar;
+    px_var << this->pxleftVar, Eigen::Matrix2d::Zero(),
+        Eigen::Matrix2d::Zero(), this->pxrightVar;
 
 
     #ifdef DEBUG_PRINTS
@@ -759,8 +752,10 @@ void Task::featuresOut(const int current_image_idx, const boost::unordered_map<b
         //std::cout<<"[FEATURES_OUT] img_idx: "<<it->second.img_idx<<" current_idx: "<<current_image_idx<<"\n";
         if (it->second.img_idx == current_image_idx)
         {
+            Feature feature;
+
             /** Get the uuid **/
-            features_uuid.push_back(it->first);
+            feature.index = it->first;
 
             /** Compute the 3d point **/
             cv::Point const &left_pt(it->second.keypoint_left.pt);
@@ -769,24 +764,30 @@ void Task::featuresOut(const int current_image_idx, const boost::unordered_map<b
             base::Vector4d image_point (left_pt.x, left_pt.y, disparity, 1);
             base::Vector4d homogeneous_point = Q * image_point;
 
-            base::Vector3d point (homogeneous_point(0)/homogeneous_point(3),
+            feature.point = base::Vector3d (homogeneous_point(0)/homogeneous_point(3),
                                 homogeneous_point(1)/homogeneous_point(3),
                                 homogeneous_point(2)/homogeneous_point(3));
-            features_point.points.push_back(point);
             #ifdef DEBUG_PRINTS
-            std::cout<<"[FEATURES_OUT] 3D point:\n"<<point<<"\n";
+            std::cout<<"[FEATURES_OUT] 3D point:\n"<<feature.point<<"\n";
             #endif
 
-            /** Color **/
-            if (_color_features_out.get())
+            if (_output_debug.value())
             {
+                /** 3D point coordinates **/
+                features_points.points.push_back(base::Vector3d (
+                                homogeneous_point(0)/homogeneous_point(3),
+                                homogeneous_point(1)/homogeneous_point(3),
+                                homogeneous_point(2)/homogeneous_point(3)));
+
+                /** Color **/
+                cv_image1 = frame_helper::FrameHelper::convertToCvMat(this->left_color_frame);
                 cv::Vec3b color = cv_image1.at<cv::Vec3b>(left_pt.y, left_pt.x);
                 base::Vector4d color4d;
                 color4d[0] = color[0]/255.0;//R
                 color4d[1] = color[1]/255.0;//G
                 color4d[2] = color[2]/255.0;//B
                 color4d[3] = 1.0;//Alpha
-                features_point.colors.push_back(color4d);
+                features_points.colors.push_back(color4d);
             }
 
             /** Compute the covariance **/
@@ -797,18 +798,25 @@ void Task::featuresOut(const int current_image_idx, const boost::unordered_map<b
                 -(baseline*left_pt.y)/disparity_power, baseline/disparity, (baseline*left_pt.y)/disparity_power, 0.00,
                 -(baseline*cameracalib.camLeft.fx)/disparity_power, 0.00,  (baseline*cameracalib.camLeft.fx)/disparity_power, 0.00;
 
-            features_cov.push_back(noise_jacobian * px_var * noise_jacobian.transpose());
+            feature.cov = noise_jacobian * px_var * noise_jacobian.transpose();
+
+            /** Store the feature in the vector **/
+            features_samples.features.push_back(feature);
         }
     }
 
     #ifdef DEBUG_PRINTS
-    std::cout<<"[FEATURES_OUT] Sent "<<features_uuid.size()<<" vector of uuids\n";
+    std::cout<<"[FEATURES_OUT] Sent "<<features_samples.features.size()<<" vector of uuids\n";
     #endif
 
-    _features_uuid_out.write(features_uuid);
-    features_point.time = this->frame_pair.time;
-    _features_point_out.write(features_point);
-    _features_covariance_out.write(features_cov);
+    features_samples.time = this->frame_pair.time;
+    _features_samples_out.write(features_samples);
+
+    if (_output_debug.value())
+    {
+        features_points.time =  this->frame_pair.time;
+        _features_point_samples_out.write(features_points);
+    }
 
     return;
 }
