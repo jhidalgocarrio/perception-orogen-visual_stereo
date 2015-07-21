@@ -44,6 +44,7 @@ namespace visual_stereo {
     struct ExteroFeatures
     {
         base::Time time;
+        unsigned int img_idx;
         std::vector<Feature> features;
     };
 

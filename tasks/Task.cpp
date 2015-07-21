@@ -810,6 +810,7 @@ void Task::featuresOut(const int current_image_idx, const boost::unordered_map<b
     #endif
 
     features_samples.time = this->frame_pair.time;
+    features_samples.img_idx = current_image_idx;
     _features_samples_out.write(features_samples);
 
     if (_output_debug.value())
