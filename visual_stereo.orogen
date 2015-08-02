@@ -41,6 +41,13 @@ task_context "Task" do
             "The lower the minHessian, the more keypoints you get, but they may be more noisy."+
             "In usual images, a value between 400 and 800 works well."
 
+    property("desired_period", "double").
+        doc "Period to compute the image processing step in seconds. It cannot be higher than the input port period."+
+            "In case of zero the period will be set to the input port period."
+
+    property("frame_window_hash_size", "unsigned int", 10)
+        doc "Number of frames to reset the feature hash key and therefore consider to be a different feature."
+
     #******************************
     #******* Input ports  *********
     #******************************

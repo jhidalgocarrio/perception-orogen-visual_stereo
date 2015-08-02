@@ -29,6 +29,7 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/unordered_map.hpp>
 #include <boost/lexical_cast.hpp> //to convert int to string in C++03
+#include <boost/math/special_functions/round.hpp> // to round a number in standard C++ < 11
 
 /** Standard **/
 #include <cmath> // math functions
@@ -98,8 +99,9 @@ namespace visual_stereo {
         /******************************************/
         /*** General Internal Storage Variables ***/
         /******************************************/
+        unsigned short computing_counts, left_computing_idx, right_computing_idx; //integer to control the period
         int frame_idx; // incremental stereo pair index
-        int frame_window_hash_size; // number of frame history to keep in the hash
+        unsigned int frame_window_hash_size; // number of frame history to keep in the hash
         base::samples::frame::FramePair frame_pair; /** Left and right images **/
         frame_helper::FrameHelper frameHelperLeft, frameHelperRight; /** Frame helper **/
         ::base::samples::frame::Frame left_color_frame;/** coloring point clouds (if selected) */

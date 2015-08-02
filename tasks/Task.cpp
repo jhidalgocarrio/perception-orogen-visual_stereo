@@ -46,11 +46,14 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
         frameHelperLeft.convert (*left_frame_sample, left_color_frame, 0, 0, _resize_algorithm.value(), true);
     }
 
+    /** Increase th computing index **/
+    this->left_computing_idx++;
+
     /** If the difference in time is less than half of a period run the odometry **/
     base::Time diffTime = frame_pair.first.time - frame_pair.second.time;
 
     /** If the difference in time is less than half of a period run the odometry **/
-    if (diffTime.toSeconds() < (_left_frame_period/2.0))
+    if (diffTime.toSeconds() < (_left_frame_period/2.0) && (this->left_computing_idx == this->computing_counts))
     {
         frame_pair.time = frame_pair.first.time;
 
@@ -93,6 +96,9 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
                 }
             }
         }
+
+        /** Reset computing indices **/
+        this->left_computing_idx = this->right_computing_idx = 0;
     }
 
     return;
@@ -108,11 +114,14 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
     frame_pair.second.init(right_frame_sample->size.width, right_frame_sample->size.height, right_frame_sample->getDataDepth(), base::samples::frame::MODE_GRAYSCALE);
     frameHelperRight.convert (*right_frame_sample, frame_pair.second, 0, 0, _resize_algorithm.value(), true);
 
+    /** Increase th computing index **/
+    this->right_computing_idx++;
+
     /** Check the time difference **/
     base::Time diffTime = frame_pair.second.time - frame_pair.first.time;
 
     /** If the difference in time is less than half of a period run the odometry **/
-    if (diffTime.toSeconds() < (_right_frame_period/2.0))
+    if (diffTime.toSeconds() < (_right_frame_period/2.0) && (this->right_computing_idx == this->computing_counts))
     {
         frame_pair.time = frame_pair.second.time;
 
@@ -155,6 +164,9 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
                 }
            }
         }
+
+        /** Reset computing indices **/
+        this->left_computing_idx = this->right_computing_idx = 0;
     }
 
     return;
@@ -171,10 +183,10 @@ bool Task::configureHook()
 
 
     /** Frame index **/
-    frame_idx = 0;
+    this->frame_idx = 0;
 
     /** Frame history to keep in the hash **/
-    this->frame_window_hash_size = 10;
+    this->frame_window_hash_size = _frame_window_hash_size.value();
 
     /** Read the camera calibration parameters **/
     this->cameracalib = _calib_parameters.value();
@@ -212,6 +224,31 @@ bool Task::configureHook()
     this->intra_frame_out.reset(outframe);
     this->inter_frame_out.reset(outframe);
     outframe = NULL;
+
+    /** Check task property parameters **/
+    if (_left_frame_period.value() != _right_frame_period.value())
+    {
+        throw std::runtime_error("[VISUAL_STEREO] Input port period in Left and Right images must be equal!");
+    }
+
+    if (_desired_period.value() < _left_frame_period.value())
+    {
+        throw std::runtime_error("[VISUAL_STEREO] Desired period cannot be smaller than input ports period!");
+    }
+    else if (_desired_period.value() == 0.00)
+    {
+        _desired_period.value() = _left_frame_period.value();
+        this->computing_counts = 1;
+    }
+    else
+    {
+        this->computing_counts = boost::math::iround(_desired_period.value()/_left_frame_period.value());
+        _desired_period.value() = this->computing_counts * _left_frame_period.value();
+    }
+
+    RTT::log(RTT::Warning)<<"[VISUAL_STEREO] Actual Computing Period: "<<_desired_period.value()<<" [seconds]"<<RTT::endlog();
+
+    this->left_computing_idx = this->right_computing_idx = 0;
 
     return true;
 }
