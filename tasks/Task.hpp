@@ -30,6 +30,7 @@
 #include <boost/unordered_map.hpp>
 #include <boost/lexical_cast.hpp> //to convert int to string in C++03
 #include <boost/math/special_functions/round.hpp> // to round a number in standard C++ < 11
+#include <boost/crc.hpp> // CRC-32 of the string UUID
 
 /** Standard **/
 #include <cmath> // math functions
@@ -242,6 +243,13 @@ namespace visual_stereo {
 
         void featuresOut(const int current_image_idx,
                         const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash);
+
+        int getCRC32(const std::string& my_string)
+        {
+            boost::crc_32_type result;
+            result.process_bytes(my_string.data(), my_string.length());
+            return result.checksum();
+        };
     };
 }
 

@@ -486,7 +486,8 @@ void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
     {
         float red = 255.0 - (255.0/(this->frame_window_hash_size)*(this->ffinal_left.img_idx-it->second.img_idx));
         cv::circle(img_out, it->second.keypoint_left.pt, 5, cv::Scalar(0, 0, red), 2);
-        cv::putText(img_out, boost::lexical_cast<std::string>(it->second.img_idx),
+        std::string uuid_string = boost::lexical_cast<std::string>(it->first);
+        cv::putText(img_out, "["+boost::lexical_cast<std::string>(it->second.img_idx)+"] "+boost::lexical_cast<std::string>(this->getCRC32(uuid_string)),
                 it->second.keypoint_left.pt, cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(0,0,0), 1.5);
     }
 
@@ -531,8 +532,8 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
     //std::cout<<"features_left.keypoints: "<<features_left.keypoints.size()<<"\n";
     //std::cout<<"features_left.descriptors: "<<features_left.descriptors.size()<<"\n";
     #ifdef DEBUG_PRINTS
-    std::cout<<"subset_left.keypoints: "<<subset_left.keypoints.size()<<"\n";
-    std::cout<<"subset_left.descriptors: "<<subset_left.descriptors.size()<<"\n";
+    std::cout<<"[INTRA_MATCHES] Subset_left.keypoints: "<<subset_left.keypoints.size()<<"\n";
+    std::cout<<"[INTRA_MATCHES] Subset_left.descriptors: "<<subset_left.descriptors.size()<<"\n";
     #endif
 
 
@@ -556,8 +557,8 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
     //std::cout<<"features_right.keypoints: "<<features_right.keypoints.size()<<"\n";
     //std::cout<<"features_right.descriptors: "<<features_right.descriptors.size()<<"\n";
     #ifdef DEBUG_PRINTS
-    std::cout<<"subset_right.keypoints: "<<subset_right.keypoints.size()<<"\n";
-    std::cout<<"subset_right.descriptors: "<<subset_right.descriptors.size()<<"\n";
+    std::cout<<"[INTRA_MATCHES] Subset_right.keypoints: "<<subset_right.keypoints.size()<<"\n";
+    std::cout<<"[INTRA_MATCHES] Subset_right.descriptors: "<<subset_right.descriptors.size()<<"\n";
     #endif
 
     /** Match left and right subsets descriptors using flann **/
@@ -621,7 +622,7 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
     std::cout<<"[HASH_FEATURES] subset_features_right.descriptors.size(): "<<subset_features_right.descriptors.size()<<"\n";
     #endif
 
-    /** Hash descriptors from the table **/
+    /** Take the descriptors from the hash table **/
     std::vector<boost::uuids::uuid> uuid_descriptors;
     cv::Mat hash_descriptors;
     hash_descriptors = cv::Mat(0, length, CV_32FC1);
@@ -639,32 +640,44 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
 
     /** Match with the current descriptors from left features **/
     bool direct_match = true;
-    cv::FlannBasedMatcher matcher;
-    std::vector<cv::DMatch> matches;
+    cv::BFMatcher matcher; //BF matches since at this point there are not many matches
+    std::vector< std::vector<cv::DMatch> > matches;
     std::vector<bool> copy_features(subset_features_left.descriptors.rows, true);
     if (hash_descriptors.rows > subset_features_left.descriptors.rows)
     {
-        matcher.match(subset_features_left.descriptors, hash_descriptors, matches);
+        matcher.knnMatch(subset_features_left.descriptors, hash_descriptors, matches, 2);
         direct_match = true;
         copy_features.resize(subset_features_left.descriptors.rows);
         std::fill(copy_features.begin(), copy_features.end(), true);
     }
     else if (hash_descriptors.rows > 0)
     {
-        matcher.match(hash_descriptors, subset_features_left.descriptors, matches);
+        matcher.knnMatch(hash_descriptors, subset_features_left.descriptors, matches, 2);
         direct_match = false;
         copy_features.resize(hash_descriptors.rows);
         std::fill(copy_features.begin(), copy_features.end(), true);
     }
 
+    /** Take only high-quality matches using a ratio of distances **/
+    std::vector<cv::DMatch> ratio_matches;
+    for (register unsigned int i = 0; i < matches.size(); ++i)
+    {
+        //std::cout<<"[HASH_FEATURES] Rating distance: "<<matches[i][0].distance<< " "<< matches[i][1].distance<<"\n";
+        const float ratio = 0.4; // As in David Lowe's paper about SIFT; It can be tuned
+        if (matches[i][0].distance < ratio * matches[i][1].distance)
+        {
+            ratio_matches.push_back(matches[i][0]);
+        }
+    }
+
     #ifdef DEBUG_PRINTS
     std::cout<<"[HASH_FEATURES] copy_features.size(): "<<copy_features.size()<<"\n";
-    std::cout<<"[HASH_FEATURES] found "<<matches.size()<<" matches\n";
+    std::cout<<"[HASH_FEATURES] found "<<ratio_matches.size()<<" ratio_matches\n";
     #endif
 
-    /** Update hash with matches **/
+    /** Update hash with the ratio_matches **/
     register int index_copy = 0;
-    for (std::vector<cv::DMatch>::const_iterator it = matches.begin(); it != matches.end(); ++it)
+    for (std::vector<cv::DMatch>::const_iterator it = ratio_matches.begin(); it != ratio_matches.end(); ++it)
     {
         boost::unordered_map<boost::uuids::uuid, StereoFeature>::iterator got;
         short int hash_idx, feature_idx;
@@ -685,9 +698,12 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
         /** Update the feature **/
         if (got != this->hash_features.end() && copy_features[feature_idx])
         {
-            //std::cout<<"[HASH_FEATURES] uuid:"<<boost::uuids::to_string(got->first)<<"\n";
-            //std::cout<<"[HASH_FEATURES] hash_features point: "<<got->second.keypoint.pt<<"\n";
-            //std::cout<<"[HASH_FEATURES] new_features_copy point: "<<subset_features_left.keypoints[feature_idx].pt<<"\n";
+            #ifdef DEBUG_PRINTS
+            std::cout<<"[HASH_FEATURES] match distance: "<<it->distance<<"\n";
+            std::cout<<"[HASH_FEATURES] uuid:"<<boost::uuids::to_string(got->first)<<"\n";
+            std::cout<<"[HASH_FEATURES] hash_features point: "<<got->second.keypoint_left.pt<<"\n";
+            std::cout<<"[HASH_FEATURES] new_features_copy point: "<<subset_features_left.keypoints[feature_idx].pt<<"\n";
+            #endif
 
             got->second.img_idx = subset_features_left.img_idx;
             got->second.keypoint_left = subset_features_left.keypoints[feature_idx];
@@ -702,7 +718,7 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
     std::cout<<"[HASH_FEATURES] Updated "<<index_copy<<" features into hash\n";
     #endif
 
-    /** Increase hash with features which did not have matches **/
+    /** Increase hash with features which did not have ratio_matches **/
     register int index = 0;
     index_copy = 0;
     for (std::vector<bool>::const_iterator it_copy = copy_features.begin();
@@ -748,17 +764,20 @@ void Task::cleanHashFeatures (const int current_image_idx,
 {
     if (current_image_idx > max_number_img)
     {
-            const int border_image_idx = (current_image_idx - max_number_img);
+        const int border_image_idx = (current_image_idx - max_number_img);
 
-            /** All the images with idx <= border_image_idx should be eliminated **/
-            for (boost::unordered_map<boost::uuids::uuid, StereoFeature>::const_iterator
-                    it = hash.begin(); it != hash.end(); ++it)
+        /** All the images with idx <= border_image_idx should be eliminated **/
+        for (boost::unordered_map<boost::uuids::uuid, StereoFeature>::const_iterator
+                it = hash.begin(); it != hash.end(); ++it)
+        {
+            if (it->second.img_idx <= border_image_idx)
             {
-                if (it->second.img_idx <= border_image_idx)
-                {
-                    hash.erase(it);
-                }
+                #ifdef DEBUG_PRINTS
+                std::cout<<"[CLEAN_HASH_FEATURES] Remove from hash "<<boost::lexical_cast<std::string>(it->first)<<"\n";
+                #endif
+                hash.erase(it);
             }
+        }
     }
 
     return;
