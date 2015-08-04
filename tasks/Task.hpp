@@ -36,7 +36,7 @@
 #include <cmath> // math functions
 #include <vector> //std::vector
 #include <algorithm>  // std::fill
-
+#include <sstream> // string split
 
 namespace visual_stereo {
 
@@ -249,6 +249,19 @@ namespace visual_stereo {
             boost::crc_32_type result;
             result.process_bytes(my_string.data(), my_string.length());
             return result.checksum();
+        };
+
+        std::vector<std::string> split(std::string str, char delimiter)
+        {
+            std::vector<std::string> internal;
+            std::stringstream ss(str); // Turn the string into a stream.
+            std::string tok;
+
+            while(getline(ss, tok, delimiter))
+            {
+                internal.push_back(tok);
+            }
+            return internal;
         };
     };
 }

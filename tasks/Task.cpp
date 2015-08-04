@@ -486,8 +486,8 @@ void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
     {
         float red = 255.0 - (255.0/(this->frame_window_hash_size)*(this->ffinal_left.img_idx-it->second.img_idx));
         cv::circle(img_out, it->second.keypoint_left.pt, 5, cv::Scalar(0, 0, red), 2);
-        std::string uuid_string = boost::lexical_cast<std::string>(it->first);
-        cv::putText(img_out, "["+boost::lexical_cast<std::string>(it->second.img_idx)+"] "+boost::lexical_cast<std::string>(this->getCRC32(uuid_string)),
+        std::vector<std::string> uuid_tokens = this->split(boost::lexical_cast<std::string>(it->first), '-');
+        cv::putText(img_out, "["+boost::lexical_cast<std::string>(it->second.img_idx)+"] "+uuid_tokens[uuid_tokens.size()-1],
                 it->second.keypoint_left.pt, cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(0,0,0), 1.5);
     }
 
