@@ -48,6 +48,10 @@ task_context "Task" do
     property("frame_window_hash_size", "unsigned int", 10)
         doc "Number of frames to reset the feature hash key and therefore consider to be a different feature."
 
+    property("hash_ratio_matches", "double", 0.08)
+        doc "Ratio to detect good matches between the current image pair and the hash of features."+
+            "As in David Lowe's paper about SIFT; It can be tuned"
+
     #******************************
     #******* Input ports  *********
     #******************************

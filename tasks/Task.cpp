@@ -663,8 +663,8 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
     for (register unsigned int i = 0; i < matches.size(); ++i)
     {
         //std::cout<<"[HASH_FEATURES] Rating distance: "<<matches[i][0].distance<< " "<< matches[i][1].distance<<"\n";
-        const float ratio = 0.4; // As in David Lowe's paper about SIFT; It can be tuned
-        if (matches[i][0].distance < ratio * matches[i][1].distance)
+        //std::cout<<"[HASH_FEATURES] Ratio: "<<matches[i][0].distance/matches[i][1].distance<<"\n";
+        if (matches[i][0].distance < _hash_ratio_matches.value() * matches[i][1].distance)
         {
             ratio_matches.push_back(matches[i][0]);
         }
