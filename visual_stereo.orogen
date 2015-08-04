@@ -88,6 +88,9 @@ task_context "Task" do
     property('output_debug', 'bool', false).
 	    doc 'Set to true if output debug information is desirable.'
 
+    property('draw_hash_uuid_features', 'bool', false).
+	    doc 'Draw has unique identified for the inter frame debug image.'
+
     property('image_ouput_type', 'visual_stereo::IMAGE_OUTPUT_TYPE').
 	    doc 'Images output type.'
 
