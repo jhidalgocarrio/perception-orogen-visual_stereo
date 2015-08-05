@@ -336,9 +336,19 @@ void Task::interMatches (const cv::detail::ImageFeatures &features_previous,
 {
 
     /** Matching descriptor vectors using flann **/
-    cv::FlannBasedMatcher matcher;
-    std::vector< cv::DMatch > matches;
-    matcher.match(features_previous.descriptors, features_current.descriptors, matches);
+    cv::BFMatcher matcher;
+    std::vector< std::vector<cv::DMatch> > prev_matches;
+    matcher.knnMatch(features_previous.descriptors, features_current.descriptors, prev_matches, 2);
+
+    /** Take only high-quality matches using a ratio of distances **/
+    std::vector<cv::DMatch> matches;
+    for (register unsigned int i = 0; i < prev_matches.size(); ++i)
+    {
+        if (prev_matches[i][0].distance < _inter_ratio_matches.value() * prev_matches[i][1].distance)
+        {
+            matches.push_back(prev_matches[i][0]);
+        }
+    }
 
     /** Extract matches points **/
     std::vector<cv::Point2f> points1, points2;
@@ -494,7 +504,7 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
     #endif
 
     /** Match left and right subsets descriptors using flann **/
-    cv::FlannBasedMatcher matcher;
+    cv::BFMatcher matcher;
     std::vector<cv::DMatch> matches;
     matcher.match(subset_left.descriptors, subset_right.descriptors, matches);
 
