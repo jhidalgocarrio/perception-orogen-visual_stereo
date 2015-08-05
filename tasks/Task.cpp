@@ -53,7 +53,7 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
     base::Time diffTime = frame_pair.first.time - frame_pair.second.time;
 
     /** If the difference in time is less than half of a period run the odometry **/
-    if (diffTime.toSeconds() < (_left_frame_period/2.0) && (this->left_computing_idx == this->computing_counts))
+    if (diffTime.toSeconds() < (_left_frame_period/2.0) && (this->left_computing_idx >= this->computing_counts))
     {
         frame_pair.time = frame_pair.first.time;
 
@@ -121,7 +121,7 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
     base::Time diffTime = frame_pair.second.time - frame_pair.first.time;
 
     /** If the difference in time is less than half of a period run the odometry **/
-    if (diffTime.toSeconds() < (_right_frame_period/2.0) && (this->right_computing_idx == this->computing_counts))
+    if (diffTime.toSeconds() < (_right_frame_period/2.0) && (this->right_computing_idx >= this->computing_counts))
     {
         frame_pair.time = frame_pair.second.time;
 
