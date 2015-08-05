@@ -213,18 +213,6 @@ namespace visual_stereo {
                         const cv::detail::ImageFeatures &features_current,
                         std::vector< cv::DMatch > &good_matches);
 
-        void drawMatches(const base::samples::frame::Frame &frame1,
-                const base::samples::frame::Frame &frame2,
-                std::vector<cv::KeyPoint> &keypoints1,
-                std::vector<cv::KeyPoint> &keypoints2,
-                std::vector<cv::DMatch> &matches);
-
-        void drawKeypoints(const base::samples::frame::Frame &frame2,
-                const std::vector<cv::KeyPoint> &keypoints1,
-                const std::vector<cv::KeyPoint> &keypoints2,
-                const std::vector<cv::DMatch> &matches,
-                const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash);
-
         void intraMatches(const cv::detail::ImageFeatures &features_left,
                     const cv::detail::ImageFeatures &features_right,
                     const std::vector<cv::DMatch> &matches_left,
@@ -243,6 +231,18 @@ namespace visual_stereo {
 
         void featuresOut(const int current_image_idx,
                         const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash);
+
+        void drawMatches(const base::samples::frame::Frame &frame1,
+                const base::samples::frame::Frame &frame2,
+                std::vector<cv::KeyPoint> &keypoints1,
+                std::vector<cv::KeyPoint> &keypoints2,
+                std::vector<cv::DMatch> &matches);
+
+        void drawKeypoints(const base::samples::frame::Frame &frame2,
+                const std::vector<cv::KeyPoint> &keypoints1,
+                const std::vector<cv::KeyPoint> &keypoints2,
+                const std::vector<cv::DMatch> &matches,
+                const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash);
 
         int getCRC32(const std::string& my_string)
         {

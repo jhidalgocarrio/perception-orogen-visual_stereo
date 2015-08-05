@@ -432,77 +432,6 @@ void Task::interMatches (const cv::detail::ImageFeatures &features_previous,
 }
 
 
-void Task::drawMatches(const base::samples::frame::Frame &frame1,
-                const base::samples::frame::Frame &frame2,
-                std::vector<cv::KeyPoint> &keypoints1,
-                std::vector<cv::KeyPoint> &keypoints2,
-                std::vector<cv::DMatch> &matches)
-{
-    /** Convert Images to opencv **/
-    cv::Mat img1 = frameHelperLeft.convertToCvMat(frame1);
-    cv::Mat img2 = frameHelperRight.convertToCvMat(frame2);
-
-    ::cv::Mat img_out;
-    cv::drawMatches (img1, keypoints1, img2, keypoints2, matches, img_out,
-    cv::Scalar::all(-1), cv::Scalar::all(-1), cv::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
-
-    ::base::samples::frame::Frame *frame_ptr = this->intra_frame_out.write_access();
-    frameHelperLeft.copyMatToFrame(img_out, *frame_ptr);
-
-    frame_ptr->time = this->frame_pair.time;
-    this->intra_frame_out.reset(frame_ptr);
-    _intra_frame_samples_out.write(this->intra_frame_out);
-
-    return;
-}
-
-
-void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
-                const std::vector<cv::KeyPoint> &keypoints1,
-                const std::vector<cv::KeyPoint> &keypoints2,
-                const std::vector<cv::DMatch> &matches,
-                const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash)
-
-{
-    /** Convert Images to opencv **/
-    cv::Mat img2 = frameHelperLeft.convertToCvMat(frame2);
-
-    ::cv::Mat img_out(img2);
-    cv::drawKeypoints (img2, keypoints1, img_out, cv::Scalar(0, 255, 0));//green previous
-    for (std::vector<cv::DMatch>::const_iterator it= matches.begin(); it!= matches.end(); ++it)
-    {
-        cv::Point point1 = keypoints1[it->queryIdx].pt;
-        cv::Point point2 = keypoints2[it->trainIdx].pt;
-
-        //cv::circle(img_out, point1, 3, cv::Scalar(0, 255, 0), 1);// green previous
-        cv::circle(img_out, point2, 3, cv::Scalar(255, 0, 0), 1);// blue current
-        cv::line (img_out, point1, point2, cv::Scalar(0, 0, 255)); // red line
-
-    }
-
-    if (_draw_hash_uuid_features.value())
-    {
-        /** Draw hash features **/
-        for (boost::unordered_map<boost::uuids::uuid, StereoFeature>::const_iterator
-                        it = hash.begin(); it != hash.end(); ++it)
-        {
-            float red = 255.0 - (255.0/(this->frame_window_hash_size)*(this->ffinal_left.img_idx-it->second.img_idx));
-            cv::circle(img_out, it->second.keypoint_left.pt, 5, cv::Scalar(0, 0, red), 2);
-            std::vector<std::string> uuid_tokens = this->split(boost::lexical_cast<std::string>(it->first), '-');
-            cv::putText(img_out, "["+boost::lexical_cast<std::string>(it->second.img_idx)+"] "+uuid_tokens[uuid_tokens.size()-1],
-                    it->second.keypoint_left.pt, cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(0,0,0), 1.5);
-        }
-    }
-
-    ::base::samples::frame::Frame *frame_ptr = this->inter_frame_out.write_access();
-    frameHelperLeft.copyMatToFrame(img_out, *frame_ptr);
-
-    frame_ptr->time = this->frame_pair.time;
-    this->inter_frame_out.reset(frame_ptr);
-    _inter_frame_samples_out.write(this->inter_frame_out);
-
-    return;
-}
 
 void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
                     const cv::detail::ImageFeatures &features_right,
@@ -597,7 +526,6 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
     #endif
     return;
 }
-
 
 void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
                         const cv::detail::ImageFeatures &new_features_right,
@@ -786,7 +714,6 @@ void Task::cleanHashFeatures (const int current_image_idx,
     return;
 }
 
-
 void Task::featuresOut(const int current_image_idx, const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash)
 {
     ExteroFeatures features_samples;
@@ -877,6 +804,78 @@ void Task::featuresOut(const int current_image_idx, const boost::unordered_map<b
         features_points.time =  this->frame_pair.time;
         _features_point_samples_out.write(features_points);
     }
+
+    return;
+}
+
+void Task::drawMatches(const base::samples::frame::Frame &frame1,
+                const base::samples::frame::Frame &frame2,
+                std::vector<cv::KeyPoint> &keypoints1,
+                std::vector<cv::KeyPoint> &keypoints2,
+                std::vector<cv::DMatch> &matches)
+{
+    /** Convert Images to opencv **/
+    cv::Mat img1 = frameHelperLeft.convertToCvMat(frame1);
+    cv::Mat img2 = frameHelperRight.convertToCvMat(frame2);
+
+    ::cv::Mat img_out;
+    cv::drawMatches (img1, keypoints1, img2, keypoints2, matches, img_out,
+    cv::Scalar::all(-1), cv::Scalar::all(-1), cv::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+
+    ::base::samples::frame::Frame *frame_ptr = this->intra_frame_out.write_access();
+    frameHelperLeft.copyMatToFrame(img_out, *frame_ptr);
+
+    frame_ptr->time = this->frame_pair.time;
+    this->intra_frame_out.reset(frame_ptr);
+    _intra_frame_samples_out.write(this->intra_frame_out);
+
+    return;
+}
+
+
+void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
+                const std::vector<cv::KeyPoint> &keypoints1,
+                const std::vector<cv::KeyPoint> &keypoints2,
+                const std::vector<cv::DMatch> &matches,
+                const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash)
+
+{
+    /** Convert Images to opencv **/
+    cv::Mat img2 = frameHelperLeft.convertToCvMat(frame2);
+
+    ::cv::Mat img_out(img2);
+    cv::drawKeypoints (img2, keypoints1, img_out, cv::Scalar(0, 255, 0));//green previous
+    for (std::vector<cv::DMatch>::const_iterator it= matches.begin(); it!= matches.end(); ++it)
+    {
+        cv::Point point1 = keypoints1[it->queryIdx].pt;
+        cv::Point point2 = keypoints2[it->trainIdx].pt;
+
+        //cv::circle(img_out, point1, 3, cv::Scalar(0, 255, 0), 1);// green previous
+        cv::circle(img_out, point2, 3, cv::Scalar(255, 0, 0), 1);// blue current
+        cv::line (img_out, point1, point2, cv::Scalar(0, 0, 255)); // red line
+
+    }
+
+    if (_draw_hash_uuid_features.value())
+    {
+        /** Draw hash features **/
+        for (boost::unordered_map<boost::uuids::uuid, StereoFeature>::const_iterator
+                        it = hash.begin(); it != hash.end(); ++it)
+        {
+            float red = 255.0 - (255.0/(this->frame_window_hash_size)*(this->ffinal_left.img_idx-it->second.img_idx));
+            cv::circle(img_out, it->second.keypoint_left.pt, 5, cv::Scalar(0, 0, red), 2);
+            std::vector<std::string> uuid_tokens = this->split(boost::lexical_cast<std::string>(it->first), '-');
+            cv::putText(img_out, "["+boost::lexical_cast<std::string>(it->second.img_idx)+"] "+uuid_tokens[uuid_tokens.size()-1],
+                    it->second.keypoint_left.pt, cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(0,0,0), 1.5);
+        }
+    }
+
+    ::base::samples::frame::Frame *frame_ptr = this->inter_frame_out.write_access();
+    frameHelperLeft.copyMatToFrame(img_out, *frame_ptr);
+
+    frame_ptr->time = this->frame_pair.time;
+    this->inter_frame_out.reset(frame_ptr);
+    _inter_frame_samples_out.write(this->inter_frame_out);
 
     return;
 }
