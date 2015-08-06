@@ -61,16 +61,28 @@ namespace visual_stereo {
         }
     };
 
-    typedef struct
+    struct PID
     {
-        double windup_guard;
+        double windup_guard; // cap on the maximum value that the integrated error
         double proportional_gain;
         double integral_gain;
         double derivative_gain;
         double prev_error;
         double int_error;
         double control;
-    } PID;
+
+        void init()
+        {
+            windup_guard = 5000.0;
+            proportional_gain = 10.0;
+            integral_gain = 5.0;
+            derivative_gain = 0.0;
+            prev_error = 0.0;
+            int_error = 0.0;
+            control = 0.0;
+            return;
+        }
+    };
 
     /*! \class Task 
      * \brief The task context provides and requires services. It uses an ExecutionEngine to perform its functions.
@@ -124,6 +136,8 @@ namespace visual_stereo {
         cv::detail::ImageFeatures ffinal_left, ffinal_right;
 
         boost::unordered_map<boost::uuids::uuid, StereoFeature> hash_features; /** current to previous index **/
+
+        PID pid;
 
         /***************************/
         /** Output Port Variables **/
@@ -257,6 +271,8 @@ namespace visual_stereo {
 
         void dynamicHessian(const unsigned int &current_features);
 
+        void dynamicPIDHessian(const unsigned int &current_features);
+
         int getCRC32(const std::string& my_string)
         {
             boost::crc_32_type result;
@@ -284,7 +300,7 @@ namespace visual_stereo {
             // set prev and integrated error to zero
             pid.prev_error = 0;
             pid.int_error = 0;
-        }
+        };
 
         void pid_update(PID& pid, double curr_error, double dt)
         {
@@ -313,7 +329,7 @@ namespace visual_stereo {
 
             // save current error as previous error for next iteration
             pid.prev_error = curr_error;
-        }
+        };
     };
 }
 

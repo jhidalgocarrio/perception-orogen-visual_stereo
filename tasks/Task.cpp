@@ -221,6 +221,9 @@ bool Task::configureHook()
     this->inter_frame_out.reset(outframe);
     outframe = NULL;
 
+    /** PID settings **/
+    pid.init();
+
     /** Check task property parameters **/
     if (_left_frame_period.value() != _right_frame_period.value())
     {
@@ -314,14 +317,14 @@ void Task::detectFeatures (const base::samples::frame::Frame &frame_left,
     features_left.descriptors = descriptors_l;
     features_right.descriptors = descriptors_r;
 
-    //#ifdef DEBUG_PRINTS
+    #ifdef DEBUG_PRINTS
     std::cout<<"DETECTING...IDX["<<features_left.img_idx<<","<<features_right.img_idx<<"]\n";
     std::cout<<"features_left.keypoints: "<<features_left.keypoints.size()<<"\n";
     std::cout<<"features_left.descriptors: "<<features_left.descriptors.size()<<"\n";
     std::cout<<"features_right.keypoints: "<<features_right.keypoints.size()<<"\n";
     std::cout<<"features_right.descriptors: "<<features_right.descriptors.size()<<"\n";
     std::cout<<"...[OK]\n";
-    //#endif
+    #endif
 
     return;
 }
@@ -430,9 +433,9 @@ void Task::interMatches (const cv::detail::ImageFeatures &features_previous,
     }
 
     good_matches = ref_matches;
-    //#ifdef DEBUG_PRINTS
+    #ifdef DEBUG_PRINTS
     std::cout<<"[INTER_MATCHES] good_matches: "<<good_matches.size()<<"\n";
-    //#endif
+    #endif
 
     return;
 }
@@ -554,12 +557,12 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
         subset_features_right.descriptors.push_back(new_features_right.descriptors.row(it->trainIdx));
     }
 
-    //#ifdef DEBUG_PRINTS
+    #ifdef DEBUG_PRINTS
     std::cout<<"[HASH_FEATURES] subset_features_left.keypoints.size(): "<<subset_features_left.keypoints.size()<<"\n";
     std::cout<<"[HASH_FEATURES] subset_features_left.descriptors.size(): "<<subset_features_left.descriptors.size()<<"\n";
     std::cout<<"[HASH_FEATURES] subset_features_right.keypoints.size(): "<<subset_features_right.keypoints.size()<<"\n";
     std::cout<<"[HASH_FEATURES] subset_features_right.descriptors.size(): "<<subset_features_right.descriptors.size()<<"\n";
-    //#endif
+    #endif
 
     /** Check to the desired number **/
     this->dynamicHessian(subset_features_left.keypoints.size());
@@ -612,10 +615,10 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
         }
     }
 
-    //#ifdef DEBUG_PRINTS
+    #ifdef DEBUG_PRINTS
     std::cout<<"[HASH_FEATURES] copy_features.size(): "<<copy_features.size()<<"\n";
     std::cout<<"[HASH_FEATURES] found "<<ratio_matches.size()<<" ratio_matches\n";
-    //#endif
+    #endif
 
     /** Update hash with the ratio_matches **/
     register int index_copy = 0;
@@ -897,7 +900,7 @@ void Task::dynamicHessian(const unsigned int &current_features)
     int margin = 0.2 * _desired_number_features.value();
     int error = current_features - _desired_number_features.value();
 
-    std::cout<<"error: "<<error<<"\n";
+    //std::cout<<"error: "<<error<<"\n";
 
     if (error  > margin)
     {
@@ -910,6 +913,18 @@ void Task::dynamicHessian(const unsigned int &current_features)
         _minimum_hessian.value() = std::max(100, static_cast<int>(_minimum_hessian.value() - (0.1 * _minimum_hessian.value())));
 
     }
+
+    return;
+}
+
+void Task::dynamicPIDHessian(const unsigned int &current_features)
+{
+    /** Percentage margin in the desired number **/
+    int error = current_features - _desired_number_features.value();
+
+    Task::pid_update(this->pid, error, _left_frame_period.value());
+    _minimum_hessian.value() = pid.control;
+    //std::cout<<"pid.control: "<<this->pid.control<<"\n";
 
     return;
 }
