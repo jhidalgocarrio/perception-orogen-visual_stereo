@@ -56,6 +56,10 @@ task_context "Task" do
         doc "Distance ratio to compare best good match to the second-best good match between the current image pair and the hash of features."+
             "As in David Lowe's paper about SIFT; It can be tuned"
 
+    property("desired_number_features", "unsigned int", 0).
+        doc "This number guarantee an approximate number of features to find dynamically varying the minimum_hessian value."+
+            "In case you don't want to have a dynamic minimum_hessian  value, set this property to zero."
+
     #******************************
     #******* Input ports  *********
     #******************************

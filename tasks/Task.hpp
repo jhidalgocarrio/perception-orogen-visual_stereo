@@ -61,6 +61,17 @@ namespace visual_stereo {
         }
     };
 
+    typedef struct
+    {
+        double windup_guard;
+        double proportional_gain;
+        double integral_gain;
+        double derivative_gain;
+        double prev_error;
+        double int_error;
+        double control;
+    } PID;
+
     /*! \class Task 
      * \brief The task context provides and requires services. It uses an ExecutionEngine to perform its functions.
      * Essential interfaces are operations, data flow ports and properties. These interfaces have been defined using the oroGen specification.
@@ -244,6 +255,8 @@ namespace visual_stereo {
                 const std::vector<cv::DMatch> &matches,
                 const boost::unordered_map<boost::uuids::uuid, StereoFeature> &hash);
 
+        void dynamicHessian(const unsigned int &current_features);
+
         int getCRC32(const std::string& my_string)
         {
             boost::crc_32_type result;
@@ -263,6 +276,44 @@ namespace visual_stereo {
             }
             return internal;
         };
+
+        /** PID simple controller **/
+
+        void pid_zeroize(PID& pid)
+        {
+            // set prev and integrated error to zero
+            pid.prev_error = 0;
+            pid.int_error = 0;
+        }
+
+        void pid_update(PID& pid, double curr_error, double dt)
+        {
+            double diff;
+            double p_term;
+            double i_term;
+            double d_term;
+
+            // integration with windup guarding
+            pid.int_error += (curr_error * dt);
+            if (pid.int_error < -(pid.windup_guard))
+                pid.int_error = -(pid.windup_guard);
+            else if (pid.int_error > pid.windup_guard)
+                pid.int_error = pid.windup_guard;
+
+            // differentiation
+            diff = ((curr_error - pid.prev_error) / dt);
+
+            // scaling
+            p_term = (pid.proportional_gain * curr_error);
+            i_term = (pid.integral_gain     * pid.int_error);
+            d_term = (pid.derivative_gain   * diff);
+
+            // summation of terms
+            pid.control = p_term + i_term + d_term;
+
+            // save current error as previous error for next iteration
+            pid.prev_error = curr_error;
+        }
     };
 }
 

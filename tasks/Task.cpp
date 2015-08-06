@@ -64,7 +64,7 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
         this->prepareMatches();
         this->detectFeatures(frame_pair.first, frame_pair.second, fcurrent_left, fcurrent_right);
 
-        if (this->frame_idx > 1)
+        if (this->frame_idx > 1 && fcurrent_left.keypoints.size() > 0)
         {
             this->interMatches(fprevious_left, fcurrent_left, inter_matches_left);
 
@@ -130,7 +130,7 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
         this->prepareMatches();
         this->detectFeatures(frame_pair.first, frame_pair.second, fcurrent_left, fcurrent_right);
 
-        if (this->frame_idx > 1)
+        if (this->frame_idx > 1 && fcurrent_left.keypoints.size() > 0)
         {
             this->interMatches(fprevious_left, fcurrent_left, inter_matches_left);
 
@@ -314,14 +314,14 @@ void Task::detectFeatures (const base::samples::frame::Frame &frame_left,
     features_left.descriptors = descriptors_l;
     features_right.descriptors = descriptors_r;
 
-    #ifdef DEBUG_PRINTS
+    //#ifdef DEBUG_PRINTS
     std::cout<<"DETECTING...IDX["<<features_left.img_idx<<","<<features_right.img_idx<<"]\n";
     std::cout<<"features_left.keypoints: "<<features_left.keypoints.size()<<"\n";
     std::cout<<"features_left.descriptors: "<<features_left.descriptors.size()<<"\n";
     std::cout<<"features_right.keypoints: "<<features_right.keypoints.size()<<"\n";
     std::cout<<"features_right.descriptors: "<<features_right.descriptors.size()<<"\n";
     std::cout<<"...[OK]\n";
-    #endif
+    //#endif
 
     return;
 }
@@ -430,9 +430,9 @@ void Task::interMatches (const cv::detail::ImageFeatures &features_previous,
     }
 
     good_matches = ref_matches;
-    #ifdef DEBUG_PRINTS
+    //#ifdef DEBUG_PRINTS
     std::cout<<"[INTER_MATCHES] good_matches: "<<good_matches.size()<<"\n";
-    #endif
+    //#endif
 
     return;
 }
@@ -530,6 +530,8 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
     std::cout<<"[INTRA_MATCHES] final_right.descriptors: "<<final_right.descriptors.size()<<"\n";
     std::cout<<"[INTRA_MATCHES] intra_matches: "<<intra_matches.size()<<"\n";
     #endif
+
+
     return;
 }
 
@@ -552,12 +554,15 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
         subset_features_right.descriptors.push_back(new_features_right.descriptors.row(it->trainIdx));
     }
 
-    #ifdef DEBUG_PRINTS
+    //#ifdef DEBUG_PRINTS
     std::cout<<"[HASH_FEATURES] subset_features_left.keypoints.size(): "<<subset_features_left.keypoints.size()<<"\n";
     std::cout<<"[HASH_FEATURES] subset_features_left.descriptors.size(): "<<subset_features_left.descriptors.size()<<"\n";
     std::cout<<"[HASH_FEATURES] subset_features_right.keypoints.size(): "<<subset_features_right.keypoints.size()<<"\n";
     std::cout<<"[HASH_FEATURES] subset_features_right.descriptors.size(): "<<subset_features_right.descriptors.size()<<"\n";
-    #endif
+    //#endif
+
+    /** Check to the desired number **/
+    this->dynamicHessian(subset_features_left.keypoints.size());
 
     /** Take the descriptors from the hash table **/
     std::vector<boost::uuids::uuid> uuid_descriptors;
@@ -607,10 +612,10 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
         }
     }
 
-    #ifdef DEBUG_PRINTS
+    //#ifdef DEBUG_PRINTS
     std::cout<<"[HASH_FEATURES] copy_features.size(): "<<copy_features.size()<<"\n";
     std::cout<<"[HASH_FEATURES] found "<<ratio_matches.size()<<" ratio_matches\n";
-    #endif
+    //#endif
 
     /** Update hash with the ratio_matches **/
     register int index_copy = 0;
@@ -882,6 +887,29 @@ void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
     frame_ptr->time = this->frame_pair.time;
     this->inter_frame_out.reset(frame_ptr);
     _inter_frame_samples_out.write(this->inter_frame_out);
+
+    return;
+}
+
+void Task::dynamicHessian(const unsigned int &current_features)
+{
+    /** Percentage margin in the desired number **/
+    int margin = 0.2 * _desired_number_features.value();
+    int error = current_features - _desired_number_features.value();
+
+    std::cout<<"error: "<<error<<"\n";
+
+    if (error  > margin)
+    {
+        /** Increase min Hessian value in order to decrease the expected number of features **/
+        _minimum_hessian.value() = std::min(15000, static_cast<int>(_minimum_hessian.value() + (0.1 * _minimum_hessian.value())));
+    }
+    else if (error < -margin)
+    {
+        /** Decrease min Hessian value in order to increase the expected number of features **/
+        _minimum_hessian.value() = std::max(100, static_cast<int>(_minimum_hessian.value() - (0.1 * _minimum_hessian.value())));
+
+    }
 
     return;
 }
