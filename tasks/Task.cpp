@@ -68,8 +68,6 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
         {
             this->interMatches(fprevious_left, fcurrent_left, inter_matches_left);
 
-            this->interMatches(fprevious_right, fcurrent_right, inter_matches_right);
-
             this->intraMatches(fcurrent_left, fcurrent_right,
                                 inter_matches_left, inter_matches_right,
                                 ffinal_left, ffinal_right, intra_matches);
@@ -135,8 +133,6 @@ void Task::right_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOn
         if (this->frame_idx > 1)
         {
             this->interMatches(fprevious_left, fcurrent_left, inter_matches_left);
-
-            this->interMatches(fprevious_right, fcurrent_right, inter_matches_right);
 
             this->intraMatches(fcurrent_left, fcurrent_right,
                                 inter_matches_left, inter_matches_right,
@@ -336,7 +332,7 @@ void Task::interMatches (const cv::detail::ImageFeatures &features_previous,
 {
 
     /** Matching descriptor vectors using flann **/
-    cv::BFMatcher matcher;
+    cv::FlannBasedMatcher matcher;
     std::vector< std::vector<cv::DMatch> > prev_matches;
     matcher.knnMatch(features_previous.descriptors, features_current.descriptors, prev_matches, 2);
 
@@ -504,7 +500,7 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
     #endif
 
     /** Match left and right subsets descriptors using flann **/
-    cv::BFMatcher matcher;
+    cv::FlannBasedMatcher matcher;
     std::vector<cv::DMatch> matches;
     matcher.match(subset_left.descriptors, subset_right.descriptors, matches);
 
@@ -581,7 +577,7 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
 
     /** Match with the current descriptors from left features **/
     bool direct_match = true;
-    cv::BFMatcher matcher; //BF matches since at this point there are not many matches
+    cv::FlannBasedMatcher matcher; //BF matches since at this point there are not many matches
     std::vector< std::vector<cv::DMatch> > matches;
     std::vector<bool> copy_features(subset_features_left.descriptors.rows, true);
     if (hash_descriptors.rows > subset_features_left.descriptors.rows)
