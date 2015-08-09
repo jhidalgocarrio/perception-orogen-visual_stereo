@@ -515,11 +515,17 @@ void Task::intraMatches(const cv::detail::ImageFeatures &features_left,
             float dy_point = std::fabs(subset_left.keypoints[it->queryIdx].pt.y - subset_right.keypoints[it->trainIdx].pt.y);
             float dy_center = std::fabs(this->cameracalib.camLeft.cy - this->cameracalib.camRight.cy);
 
-            /** Epipolar line **/
+            /** Approx to epipolar line constraint **/
             if (dy_point <= 5.0 * dy_center)
             {
                 intra_matches.push_back(*it);
             }
+        }
+
+        /** They get sorted by distance in ascending order by default **/
+        if (intra_matches.size() >= _desired_number_features.value())
+        {
+            break;
         }
     }
 
@@ -563,9 +569,6 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
     std::cout<<"[HASH_FEATURES] subset_features_right.keypoints.size(): "<<subset_features_right.keypoints.size()<<"\n";
     std::cout<<"[HASH_FEATURES] subset_features_right.descriptors.size(): "<<subset_features_right.descriptors.size()<<"\n";
     #endif
-
-    /** Check to the desired number **/
-    this->dynamicHessian(subset_features_left.keypoints.size());
 
     /** Take the descriptors from the hash table **/
     std::vector<boost::uuids::uuid> uuid_descriptors;
