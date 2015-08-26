@@ -280,8 +280,8 @@ void Task::prepareMatches()
     this->fprevious_right = this->fcurrent_right;
 
     /** Increase the image index**/
-    this->fcurrent_left.img_idx = frame_idx;
-    this->fcurrent_right.img_idx = frame_idx++;
+    this->fcurrent_left.img_idx = this->frame_idx;
+    this->fcurrent_right.img_idx = this->frame_idx++;
 
     return;
 }
@@ -879,11 +879,15 @@ void Task::drawKeypoints(const base::samples::frame::Frame &frame2,
         for (boost::unordered_map<boost::uuids::uuid, StereoFeature>::const_iterator
                         it = hash.begin(); it != hash.end(); ++it)
         {
-            float red = 255.0 - (255.0/(this->frame_window_hash_size)*(this->ffinal_left.img_idx-it->second.img_idx));
-            cv::circle(img_out, it->second.keypoint_left.pt, 5, cv::Scalar(0, 0, red), 2);
-            std::vector<std::string> uuid_tokens = this->split(boost::lexical_cast<std::string>(it->first), '-');
-            cv::putText(img_out, "["+boost::lexical_cast<std::string>(it->second.img_idx)+"] "+uuid_tokens[uuid_tokens.size()-1],
-                    it->second.keypoint_left.pt, cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(0,0,0), 1.5);
+            /** Only current features but with the hash id and the image frame index in the label **/
+            if (it->second.img_idx == this->fcurrent_left.img_idx)
+            {
+                float red = 255.0 - (255.0/(this->frame_window_hash_size)*(this->ffinal_left.img_idx-it->second.img_idx));
+                cv::circle(img_out, it->second.keypoint_left.pt, 5, cv::Scalar(0, 0, red), 2);
+                std::vector<std::string> uuid_tokens = this->split(boost::lexical_cast<std::string>(it->first), '-');
+                cv::putText(img_out, uuid_tokens[uuid_tokens.size()-1]+"["+boost::lexical_cast<std::string>(it->second.img_idx)+"]",
+                        it->second.keypoint_left.pt, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, cv::Scalar(0,0,0), 2.5);
+            }
         }
     }
 
