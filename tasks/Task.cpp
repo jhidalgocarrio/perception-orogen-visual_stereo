@@ -684,7 +684,7 @@ void Task::hashFeatures (const cv::detail::ImageFeatures &new_features_left,
                                     subset_features_left.descriptors.row(index));
 
             /** Insert new feature in the hash **/
-            this->hash_features.insert(std::make_pair<boost::uuids::uuid, StereoFeature>
+            this->hash_features.insert(std::pair<boost::uuids::uuid, StereoFeature>
                     (boost::uuids::random_generator()(), f));
 
             #ifdef DEBUG_PRINTS
