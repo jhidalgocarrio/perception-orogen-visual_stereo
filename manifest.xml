@@ -1,6 +1,6 @@
 <package>
-  <description brief="Visual Odometrt">
-  Visual Odometry using Opencv
+  <description brief="Visual Stereo">
+  Visual Stereo using Opencv
   </description>
   <author>Javier Hidalgo Carrio/javier.hidalgo_carrio@dfki.de</author>
   <license></license>

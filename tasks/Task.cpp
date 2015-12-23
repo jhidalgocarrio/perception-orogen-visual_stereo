@@ -46,7 +46,7 @@ void Task::left_frameCallback(const base::Time &ts, const ::RTT::extras::ReadOnl
         frameHelperLeft.convert (*left_frame_sample, left_color_frame, 0, 0, _resize_algorithm.value(), true);
     }
 
-    /** Increase th computing index **/
+    /** Increase the computing index **/
     this->left_computing_idx++;
 
     /** If the difference in time is less than half of a period run the odometry **/
@@ -760,23 +760,28 @@ void Task::featuresOut(const int current_image_idx, const boost::unordered_map<b
             /** Get the uuid **/
             feature.index = it->first;
 
-            /** Compute the 3d point **/
+            /** Take the "Stereo" 2d point **/
             cv::Point const &left_pt(it->second.keypoint_left.pt);
             cv::Point const &right_pt(it->second.keypoint_right.pt);
+            feature.stereo_point = base::Vector3d(left_pt.x, right_pt.x, left_pt.y);
+
+            /** Compute the 3d point **/
             double disparity = std::min(right_pt.x - left_pt.x, -1);
             base::Vector4d image_point (left_pt.x, left_pt.y, disparity, 1);
             base::Vector4d homogeneous_point = Q * image_point;
 
-            feature.point = base::Vector3d (homogeneous_point(0)/homogeneous_point(3),
+            feature.point_3d = base::Vector3d (homogeneous_point(0)/homogeneous_point(3),
                                 homogeneous_point(1)/homogeneous_point(3),
                                 homogeneous_point(2)/homogeneous_point(3));
             #ifdef DEBUG_PRINTS
-            std::cout<<"[FEATURES_OUT] 3D point:\n"<<feature.point<<"\n";
+            std::cout<<"[FEATURES_OUT] Image point[left]: "<<left_pt.x<<" "<<left_pt.y<<"\n";
+            std::cout<<"[FEATURES_OUT] Image point[right]: "<<right_pt.x<<" "<<right_pt.y<<"\n";
+            std::cout<<"[FEATURES_OUT] 3D point:\n"<<feature.point_3d<<"\n";
             #endif
 
             if (_output_debug.value())
             {
-                /** 3D point coordinates **/
+                /** 3D point coordinates in base point cloud structure **/
                 features_points.points.push_back(base::Vector3d (
                                 homogeneous_point(0)/homogeneous_point(3),
                                 homogeneous_point(1)/homogeneous_point(3),
@@ -801,7 +806,7 @@ void Task::featuresOut(const int current_image_idx, const boost::unordered_map<b
                 -(baseline*left_pt.y)/disparity_power, baseline/disparity, (baseline*left_pt.y)/disparity_power, 0.00,
                 -(baseline*cameracalib.camLeft.fx)/disparity_power, 0.00,  (baseline*cameracalib.camLeft.fx)/disparity_power, 0.00;
 
-            feature.cov = noise_jacobian * px_var * noise_jacobian.transpose();
+            feature.cov_3d = noise_jacobian * px_var * noise_jacobian.transpose();
 
             /** Store the feature in the vector **/
             features_samples.features.push_back(feature);
