@@ -14,8 +14,8 @@
   <depend package="dummy-dependency-n-1" />
   <depend package="dummy-dependency-n" />
   -->
+  <rosdep name="opencv" />
   <depend package="base/types" />
-  <depend package="opencv" />
   <depend package="drivers/orogen/aggregator" />
   <depend package="image_processing/frame_helper" />
 </package>
